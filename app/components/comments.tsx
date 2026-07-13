@@ -1,0 +1,313 @@
+"use client";
+import { useEffect, useState } from "react";
+import {
+  Heart,
+  MessageCircle,
+  Repeat2,
+  Send,
+  MoreHorizontal,
+  ChevronDown
+} from "lucide-react";
+
+// ---- sample data -----------------------------------------------------
+
+const initialComments = [
+  {
+    id: "c1",
+    author: "Mara Lindqvist",
+    handle: "mara.codes",
+    avatar: "https://i.pravatar.cc/150?img=47",
+    timestamp: "2h",
+    text: "Rebuilt our onboarding flow this weekend — cut the steps from 7 down to 3. Feels so much better already.",
+    image: "https://picsum.photos/seed/onboarding/800/500",
+    likes: 128,
+    liked: false,
+    replies: [
+      {
+        id: "c1-r1",
+        author: "Devon Cole",
+        handle: "devoncole",
+        avatar: "https://i.pravatar.cc/150?img=12",
+        timestamp: "1h",
+        text: "This is great, did you drop the email verification step too?",
+        likes: 6,
+        liked: false
+      },
+      {
+        id: "c1-r2",
+        author: "Priya Shah",
+        handle: "priyashah",
+        avatar: "https://i.pravatar.cc/150?img=32",
+        timestamp: "55m",
+        text: "Screenshots or it didn't happen 👀",
+        likes: 2,
+        liked: false
+      }
+    ]
+  },
+  {
+    id: "c2",
+    author: "Theo Marsh",
+    handle: "theo_m",
+    avatar: "https://i.pravatar.cc/150?img=68",
+    timestamp: "3h",
+    text: "Honestly the hardest part of any redesign is convincing yourself the old version wasn't fine.",
+    likes: 342,
+    liked: true,
+    replies: []
+  },
+  {
+    id: "c3",
+    author: "Yuki Tanaka",
+    handle: "yukit",
+    avatar: "https://i.pravatar.cc/150?img=5",
+    timestamp: "5h",
+    text: "Curious what tools you used to prototype this before building it out.",
+    likes: 14,
+    liked: false,
+    replies: []
+  },
+  {
+    id: "c36",
+    author: "Yuki Tanaka",
+    handle: "yukit",
+    avatar: "https://i.pravatar.cc/150?img=5",
+    timestamp: "5h",
+    text: "Curious what tools you used to prototype this before building it out.",
+    likes: 14,
+    liked: false,
+    replies: []
+  },
+  {
+    id: "c36",
+    author: "Yuki Tanaka",
+    handle: "yukit",
+    avatar: "https://i.pravatar.cc/150?img=5",
+    timestamp: "5h",
+    text: "Curious what tools you used to prototype this before building it out.",
+    likes: 14,
+    liked: false,
+    replies: []
+  }
+];
+
+// ---- helpers -----------------------------------------------------
+
+function formatCount(n: any) {
+  if (n >= 1000) return (n / 1000).toFixed(n % 1000 >= 100 ? 1 : 0) + "k";
+  return String(n);
+}
+
+// toggle like immutably at any depth of the reply tree
+function toggleLike(comments: any, id: number) {
+  return comments.map((c: any) => {
+    if (c.id === id) {
+      const liked = !c.liked;
+      return { ...c, liked, likes: liked ? c.likes + 1 : c.likes - 1 };
+    }
+    if (c.replies?.length) {
+      return { ...c, replies: toggleLike(c.replies, id) };
+    }
+    return c;
+  });
+}
+
+// ---- single comment row (recursive) -----------------------------------------------------
+
+function CommentItem({
+  comment,
+  depth,
+  onLike,
+  isLast
+}: {
+  comment: any;
+  depth: number;
+  onLike: (id: number) => void;
+  isLast: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const hasReplies = comment.replies && comment.replies.length > 0;
+
+  return (
+    <div className="relative">
+      <div className="flex p-2 py-1">
+        {/* avatar + connecting line column */}
+        <div className="flex flex-col items-center shrink-0">
+          <img
+            src={comment.avatar}
+            alt={comment.author}
+            className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover ring-1 ring-black/5"
+          />
+          {hasReplies && !collapsed && (
+            <div className="mt-1.5 flex-1 w-px bg-neutral-200" />
+          )}
+        </div>
+
+        {/* content column */}
+        <div className="min-w-0 flex-1 pb-1">
+          <div className="flex items-center gap-1.5 text-[14px] sm:text-[15px]">
+            <span className="font-semibold text-neutral-900 truncate max-w-[45%] sm:max-w-none">
+              {comment.author}
+            </span>
+            <span className="text-neutral-400 truncate hidden xs:inline sm:inline">
+              @{comment.handle}
+            </span>
+            <span className="text-neutral-400">·</span>
+            <span className="text-neutral-400 whitespace-nowrap">
+              {comment.timestamp}
+            </span>
+            <button
+              className="ml-auto p-1 -mr-1 rounded-full text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+              aria-label="More options"
+            >
+              <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
+            </button>
+          </div>
+
+          <p className="mt-0.5 text-[13px] sm:text-[15px] leading-snug text-neutral-800 break-words">
+            {comment.text}
+          </p>
+
+          {comment.image && (
+            <div className="mt-2.5 overflow-hidden rounded-xl  max-w-full sm:max-w-sm">
+              <img
+                src={comment.image}
+                alt=""
+                className="w-full h-auto max-h-72 object-cover"
+              />
+            </div>
+          )}
+
+          {/* action bar */}
+          <div className="mt-2 flex items-center gap-4 sm:gap-5 text-neutral-500">
+            <button
+              onClick={() => onLike(comment.id)}
+              className="group flex items-center gap-1.5"
+              aria-label="Like"
+            >
+              <Heart
+                className={`h-[18px] w-[18px] transition-transform group-active:scale-90 ${
+                  comment.liked
+                    ? "fill-rose-500 stroke-rose-500"
+                    : "stroke-current"
+                }`}
+                strokeWidth={1.8}
+              />
+              <span
+                className={`text-[12.5px] sm:text-[13px] ${comment.liked ? "text-rose-500" : ""}`}
+              >
+                {formatCount(comment.likes)}
+              </span>
+            </button>
+
+            <button
+              className="group flex items-center gap-1.5"
+              aria-label="Reply"
+            >
+              <MessageCircle
+                className="h-[18px] w-[18px] group-active:scale-90 transition-transform"
+                strokeWidth={1.8}
+              />
+              <span className="text-[12.5px] sm:text-[13px]">
+                {hasReplies ? formatCount(comment.replies.length) : ""}
+              </span>
+            </button>
+
+            <button className="group" aria-label="Repost">
+              <Repeat2
+                className="h-[19px] w-[19px] group-active:scale-90 transition-transform"
+                strokeWidth={1.8}
+              />
+            </button>
+
+            <button className="group" aria-label="Share">
+              <Send
+                className="h-[17px] w-[17px] group-active:scale-90 transition-transform"
+                strokeWidth={1.8}
+              />
+            </button>
+          </div>
+
+          {/* collapse toggle when there are nested replies */}
+          {hasReplies && (
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              className="mt-2 flex items-center gap-1 text-[12.5px] sm:text-[13px] font-medium text-neutral-400 hover:text-neutral-600"
+            >
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+                strokeWidth={2}
+              />
+              {collapsed
+                ? `Show ${comment.replies.length} ${comment.replies.length === 1 ? "reply" : "replies"}`
+                : "Hide replies"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* nested replies */}
+      {hasReplies && collapsed && (
+        <div className="ml-[15px] sm:ml-[17px] pl-[21px] sm:pl-[23px] text-[10px]">
+          {comment.replies.map((reply: any, i: number) => (
+            <CommentItem
+              key={reply.id}
+              comment={reply}
+              depth={depth + 1}
+              onLike={onLike}
+              isLast={i === comment.replies.length - 1}
+            />
+          ))}
+        </div>
+      )}
+
+      {!isLast && depth === 0 && <div className="mx-4 sm:mx-6" />}
+    </div>
+  );
+}
+
+// ---- root component -----------------------------------------------------
+
+export default function Comments() {
+  const [comments, setComments] = useState(initialComments);
+
+  const handleLike = (id: number) =>
+    setComments((prev) => toggleLike(prev, id));
+
+  return (
+    <div className="flex flex-col h-screen bg-white">
+      {/* <div className="">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+          <h2 className="text-[17px] sm:text-lg font-semibold text-neutral-900">
+            Street Gp Topics
+          </h2>
+          <span className="text-[13px] text-neutral-400">
+            {comments.length} topics
+          </span>
+        </div>
+      </div> */}
+
+      <div
+        className="
+      flex-1 overflow-y-auto
+      max-w-6xl w-full mx-auto
+      [&::-webkit-scrollbar]:w-1
+      [&::-webkit-scrollbar-track]:bg-transparent
+      [&::-webkit-scrollbar-thumb]:bg-gray-200
+      [&::-webkit-scrollbar-thumb]:rounded-full
+      hover:[&::-webkit-scrollbar-thumb]:bg-gray-500
+    "
+      >
+        {comments.map((c, i) => (
+          <CommentItem
+            key={c.id}
+            comment={c}
+            depth={0}
+            onLike={handleLike}
+            isLast={i === comments.length - 1}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
