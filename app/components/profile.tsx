@@ -16,7 +16,7 @@ interface SettingsProps {
 
 export default function Settings({ onNavigate }: SettingsProps) {
   return (
-    <div className="flex h-full flex-col lg:sticky lg:top-0 lg:h-screen">
+    <div className="flex h-full flex-col lg:sticky lg:top-0">
       {/* Profile quick view */}
       <div className="border-b border-neutral-100 p-6">
         <div className="flex items-center gap-3.5">

@@ -179,7 +179,7 @@ function CommentItem({
           )}
 
           {/* action bar */}
-          <div className="mt-2 flex items-center gap-4 sm:gap-5 text-neutral-500">
+          <div className="mt-2 flex items-center justify-end gap-4 p-1 sm:gap-5 text-neutral-500">
             <button
               onClick={() => onLike(comment.id)}
               className="group flex items-center gap-1.5"
@@ -200,7 +200,7 @@ function CommentItem({
               </span>
             </button>
 
-            <button
+            {/* <button
               className="group flex items-center gap-1.5"
               aria-label="Reply"
             >
@@ -211,25 +211,25 @@ function CommentItem({
               <span className="text-[12.5px] sm:text-[13px]">
                 {hasReplies ? formatCount(comment.replies.length) : ""}
               </span>
-            </button>
+            </button> */}
 
-            <button className="group" aria-label="Repost">
+            {/* <button className="group" aria-label="Repost">
               <Repeat2
                 className="h-[19px] w-[19px] group-active:scale-90 transition-transform"
                 strokeWidth={1.8}
               />
-            </button>
-
+            </button> */}
+{/* 
             <button className="group" aria-label="Share">
               <Send
                 className="h-[17px] w-[17px] group-active:scale-90 transition-transform"
                 strokeWidth={1.8}
               />
-            </button>
+            </button> */}
           </div>
 
           {/* collapse toggle when there are nested replies */}
-          {hasReplies && (
+          {/* {hasReplies && (
             <button
               onClick={() => setCollapsed((v) => !v)}
               className="mt-2 flex items-center gap-1 text-[12.5px] sm:text-[13px] font-medium text-neutral-400 hover:text-neutral-600"
@@ -242,11 +242,11 @@ function CommentItem({
                 ? `Show ${comment.replies.length} ${comment.replies.length === 1 ? "reply" : "replies"}`
                 : "Hide replies"}
             </button>
-          )}
+          )} */}
         </div>
       </div>
 
-      {/* nested replies */}
+      {/* nested replies
       {hasReplies && collapsed && (
         <div className="ml-[15px] sm:ml-[17px] pl-[21px] sm:pl-[23px] text-[10px]">
           {comment.replies.map((reply: any, i: number) => (
@@ -259,7 +259,7 @@ function CommentItem({
             />
           ))}
         </div>
-      )}
+      )} */}
 
       {!isLast && depth === 0 && <div className="mx-4 sm:mx-6" />}
     </div>
@@ -275,7 +275,7 @@ export default function Comments() {
     setComments((prev) => toggleLike(prev, id));
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col h-screen">
       {/* <div className="">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
           <h2 className="text-[17px] sm:text-lg font-semibold text-neutral-900">
