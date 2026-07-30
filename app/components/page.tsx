@@ -1,14 +1,61 @@
 // app/page.tsx
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Settings from "./profile";
 import Comments from "./comments";
 import { Menu, X, Feather, ChevronLeft } from "lucide-react";
 import Body from "./body";
+import { useAuth } from "../providers";
+import { tablesDB } from "@/lib/appwrite";
+import { Query } from "appwrite";
+
+type SettingsCompatProps = {
+  onNavigate: () => void;
+  authUser?: any;
+};
+
+function SettingsCompat({ onNavigate, authUser }: SettingsCompatProps) {
+  return Settings({ onNavigate, authUser } as any);
+}
 
 export default function Main() {
+  const { user } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isColumn3Open, setIsColumn3Open] = useState(false);
+  const [isComment, setIsComment] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+
+  const [selectedComment, setSelectedComment] = useState<any>(null);
+
+  const openComments = (comments: any) => {
+    setSelectedComment(comments);
+    setIsColumn3Open(true);
+    setIsComment(true);
+  };
+
+
+useEffect(() => {
+  if (!user) return;
+
+  const fetchProfile = async () => {
+    try {
+      const result = await tablesDB.listRows({
+        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
+        queries: [
+          Query.equal("user_id", user.$id),
+        ],
+      });
+
+      setProfile(result.rows[0] ?? null);
+      // console.log(result.rows)
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  fetchProfile();
+}, [user]);
 
   return (
     <div className="feather-app min-h-screen antialiased">
@@ -50,10 +97,15 @@ export default function Main() {
         <aside className="hidden lg:flex flex-col pr-4">
           <div className="px-6 pt-6 pb-4 flex items-center gap-2">
             <Feather className="h-5 w-5" style={{ color: "var(--fern)" }} />
-            <span className="font-display text-xl tracking-tight">Street GP</span>
+            <span className="font-display text-xl tracking-tight">
+              Street GP
+            </span>
           </div>
           <div className="flex-1 px-2">
-            <Settings onNavigate={() => setIsSidebarOpen(false)} />
+            <Settings
+              onNavigate={() => setIsSidebarOpen(false)}
+              authUser={profile}
+            />
           </div>
         </aside>
 
@@ -65,13 +117,19 @@ export default function Main() {
             ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
             lg:hidden
           `}
-          style={{ backgroundColor: "var(--paper)", borderRight: "1px solid var(--hairline)" }}
+          style={{
+            backgroundColor: "var(--paper)",
+            borderRight: "1px solid var(--hairline)"
+          }}
         >
           <div className="px-6 pt-6 pb-4 flex items-center gap-2">
             <Feather className="h-5 w-5" style={{ color: "var(--fern)" }} />
             <span className="font-display text-xl tracking-tight">Feather</span>
           </div>
-          <Settings onNavigate={() => setIsSidebarOpen(false)} />
+          <Settings
+            onNavigate={() => setIsSidebarOpen(false)}
+            authUser={profile}
+          />
         </aside>
 
         {/* MIDDLE COLUMN */}
@@ -79,14 +137,21 @@ export default function Main() {
           {/* Mobile Top Header */}
           <header
             className="sticky top-0 z-40 flex items-center justify-between p-3 backdrop-blur-md lg:hidden"
-            style={{ backgroundColor: "rgba(242,239,230,0.85)", borderBottom: "1px solid var(--hairline)" }}
+            style={{
+              backgroundColor: "rgba(242,239,230,0.85)",
+              borderBottom: "1px solid var(--hairline)"
+            }}
           >
             <button
               onClick={() => setIsSidebarOpen((v) => !v)}
               className="rounded-full p-2 transition-colors"
               aria-label="Toggle menu"
             >
-              {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {isSidebarOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </button>
 
             <div className="flex items-center gap-2.5">
@@ -101,8 +166,15 @@ export default function Main() {
                 />
               </div>
               <div className="leading-tight">
-                <p className="text-sm font-semibold font-display">Alex Rivera</p>
-                <p className="text-xs font-mono" style={{ color: "var(--ink-soft)" }}>@arivera_dev</p>
+                <p className="text-sm font-semibold font-display">
+                  {user?.name}
+                </p>
+                <p
+                  className="text-xs font-mono"
+                  style={{ color: "var(--ink-soft)" }}
+                >
+                  {user?.email}
+                </p>
               </div>
             </div>
 
@@ -117,17 +189,25 @@ export default function Main() {
 
           {/* Main Content */}
           <main className="flex-1 overflow-auto">
-            <Body />
+            <Body onSelectComment={(comments) => openComments(comments)} />
           </main>
         </div>
 
         {/* COLUMN 3 - Desktop */}
         <div className="hidden md:flex flex-col p-5 h-screen overflow-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "var(--clay)" }} />
-            <p className="font-display text-lg tracking-tight">Comments</p>
-          </div>
-          <Comments />
+          {isComment && (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <div
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: "var(--clay)" }}
+                />
+                <p className="font-display text-lg tracking-tight">Comments</p>
+              </div>
+
+              <Comments comments={selectedComment} />
+            </>
+          )}
         </div>
 
         {/* MOBILE BOTTOM SHEET - Column 3 */}
@@ -147,10 +227,16 @@ export default function Main() {
                 ${isColumn3Open ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"}
                 lg:hidden
               `}
-              style={{ backgroundColor: "var(--paper)", borderTop: "1px solid var(--hairline)" }}
+              style={{
+                backgroundColor: "var(--paper)",
+                borderTop: "1px solid var(--hairline)"
+              }}
             >
               <div className="flex justify-center pt-4 pb-2">
-                <div className="w-11 h-1.5 rounded-full" style={{ backgroundColor: "var(--hairline)" }} />
+                <div
+                  className="w-11 h-1.5 rounded-full"
+                  style={{ backgroundColor: "var(--hairline)" }}
+                />
               </div>
 
               <div className="px-5 pb-4 flex items-center justify-between">
@@ -167,7 +253,7 @@ export default function Main() {
               </div>
 
               <div className="overflow-auto h-[calc(78vh-80px)] px-5 pb-5">
-                <Comments />
+                <Comments comments={selectedComment} />
               </div>
             </div>
           </>

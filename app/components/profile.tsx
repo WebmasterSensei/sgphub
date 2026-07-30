@@ -1,5 +1,6 @@
 // components/settings.tsx
 "use client";
+import { Account, Client } from "appwrite";
 import {
   User,
   Bell,
@@ -7,23 +8,38 @@ import {
   Palette,
   Globe,
   LogOut,
-  ChevronRight,
+  ChevronRight
 } from "lucide-react";
 
-interface SettingsProps {
-  onNavigate?: () => void;
-}
+type SettingsProps = {
+  onNavigate: () => void;
+  authUser: any; // or Models.User<Models.Preferences> | null
+};
 
-export default function Settings({ onNavigate }: SettingsProps) {
+export default function Settings({ onNavigate, authUser }: SettingsProps) {
+  const client = new Client()
+    .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
+    .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
+
+  const account = new Account(client);
+  const logout = async () => {
+    try {
+      await account.deleteSession("current");
+      window.location.href = "/"; // or wherever your login page is
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
   return (
-    <div className="flex h-full flex-col lg:sticky lg:top-0">
+    <div className="flex h-full flex-col lg:sticky lg:top-0P">
       {/* Profile quick view */}
       <div className="border-b border-neutral-100 p-6">
         <div className="flex items-center gap-3.5">
           <div className="relative">
             <div className="h-14 w-14 overflow-hidden rounded-full ring-1 ring-neutral-200">
               <img
-                src="https://picsum.photos/id/64/300/300"
+                src={authUser?.avatar}
                 alt="Alex Rivera"
                 className="h-full w-full object-cover"
               />
@@ -32,8 +48,10 @@ export default function Settings({ onNavigate }: SettingsProps) {
           </div>
 
           <div className="min-w-0">
-            <h2 className="truncate font-semibold text-neutral-900">Alex Rivera</h2>
-            <p className="truncate text-sm text-neutral-500">@arivera_dev</p>
+            <h2 className="truncate font-semibold text-neutral-900">
+             {authUser?.name}
+            </h2>
+            <p className="truncate text-sm text-neutral-500">{authUser?.email}</p>
           </div>
         </div>
       </div>
@@ -46,7 +64,11 @@ export default function Settings({ onNavigate }: SettingsProps) {
         <ul className="space-y-0.5">
           <NavItem icon={User} label="Profile" active onClick={onNavigate} />
           <NavItem icon={Bell} label="Notifications" onClick={onNavigate} />
-          <NavItem icon={Shield} label="Privacy & safety" onClick={onNavigate} />
+          <NavItem
+            icon={Shield}
+            label="Privacy & safety"
+            onClick={onNavigate}
+          />
         </ul>
 
         <p className="px-3 pb-2 pt-6 text-[11px] font-semibold tracking-wide text-neutral-400">
@@ -54,13 +76,20 @@ export default function Settings({ onNavigate }: SettingsProps) {
         </p>
         <ul className="space-y-0.5">
           <NavItem icon={Palette} label="Appearance" onClick={onNavigate} />
-          <NavItem icon={Globe} label="Language & region" onClick={onNavigate} />
+          <NavItem
+            icon={Globe}
+            label="Language & region"
+            onClick={onNavigate}
+          />
         </ul>
       </nav>
 
       {/* Footer */}
       <div className="border-t border-neutral-100 p-4">
-        <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-neutral-500 transition-colors hover:bg-red-50 hover:text-red-600">
+        <button
+          onClick={logout}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-neutral-500 transition-colors hover:bg-red-50 hover:text-red-600"
+        >
           <LogOut className="h-4 w-4" />
           <span>Log out</span>
         </button>
@@ -73,7 +102,7 @@ function NavItem({
   icon: Icon,
   label,
   active = false,
-  onClick,
+  onClick
 }: {
   icon: any;
   label: string;
