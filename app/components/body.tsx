@@ -8,18 +8,25 @@ import {
   Bookmark,
   MoreHorizontal,
   Plus,
-  Image as ImageIcon
+  Image as ImageIcon,
+  SendHorizontal,
+  CirclePlus
 } from "lucide-react";
+import { useAuth } from "../providers";
 
 type BodyProps = {
   onSelectComment: (comments: any[]) => void;
+  profile: any;
 };
-export default function Body({ onSelectComment }: BodyProps) {
+export default function Body({ onSelectComment, profile }: BodyProps) {
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [likeCount, setLikeCount] = useState(1284);
   const [showBurst, setShowBurst] = useState(false);
   const [posts, getPosts] = useState<any[]>([]);
+  const [isLoading, gettingPost] = useState<boolean>(false);
+  const [postValue, setPostValue] = useState<string>("");
+  const { user } = useAuth();
   // const [comments, getCommentsData] = useState<any[]>([]);
   const lastTap = useRef(0);
 
@@ -70,7 +77,37 @@ export default function Body({ onSelectComment }: BodyProps) {
     }
   };
 
+  const submitPosts = async () => {
+    if (!user) {
+      alert("Please log in first.");
+      return;
+    }
+
+    if (!postValue.trim()) {
+      alert("Post cannot be empty.");
+      return;
+    }
+
+    try {
+      await tablesDB.createRow({
+        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_TABLE_ID!,
+        rowId: ID.unique(),
+        data: {
+          content: postValue.trim(),
+          user_id: user.$id
+        }
+      });
+
+      setPostValue("");
+      fetchRows(); // Reload the posts
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const fetchRows = async () => {
+    gettingPost(true);
     try {
       const postsResult = await tablesDB.listRows({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -111,6 +148,7 @@ export default function Body({ onSelectComment }: BodyProps) {
               };
             })
           );
+          // gettingPost(true);
 
           return {
             ...post,
@@ -124,8 +162,11 @@ export default function Body({ onSelectComment }: BodyProps) {
       getPosts(postsWithData);
     } catch (err) {
       console.error(err);
+    } finally {
+      gettingPost(false);
     }
   };
+
   useEffect(() => {
     fetchRows();
   }, []);
@@ -136,120 +177,159 @@ export default function Body({ onSelectComment }: BodyProps) {
       <div className="sticky top-0 z-30 w-full flex items-center gap-3 px-3.5 py-2.5 bg-white/90 backdrop-blur-md border-b border-neutral-200">
         <div className="w-9 h-9 shrink-0 rounded-full overflow-hidden ring-1 ring-neutral-200">
           <img
-            src="https://i.pravatar.cc/64?img=12"
+            src={profile?.avatar}
             alt="your profile"
             className="w-full h-full object-cover"
           />
         </div>
 
-        <button
-          className="flex-1 text-left text-sm text-neutral-500 bg-neutral-100 hover:bg-neutral-200/70 transition-colors rounded-full px-4 py-2"
+        <textarea
+          placeholder="What's on your mind?"
+          rows={1}
+          className="
+    flex-1
+    w-full
+    text-sm
+    text-neutral-800
+    placeholder:text-neutral-400
+    bg-neutral-100
+    hover:bg-neutral-200/70
+    focus:bg-white
+    rounded-2xl
+    px-5 py-3
+    border border-transparent
+    focus:border-neutral-300
+    focus:ring-2 focus:ring-neutral-200
+    outline-none
+    transition-all duration-200
+    shadow-sm
+    resize-none
+  "
           aria-label="Create a new post"
-        >
-          What's on your mind?
-        </button>
-
-        <button
-          aria-label="Add photo"
-          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition-colors"
-        >
-          <ImageIcon className="w-5 h-5" strokeWidth={1.8} />
-        </button>
+          value={postValue}
+          onChange={(e) => setPostValue(e.target.value)}
+        />
 
         <button
           aria-label="New post"
-          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center bg-neutral-900 text-white active:scale-95 transition-transform"
+          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition-colors"
         >
-          <Plus className="w-5 h-5" strokeWidth={2} />
+          <CirclePlus className="w-7 h-7" strokeWidth={2} />
+        </button>
+        <button
+          onClick={submitPosts}
+          aria-label="Add photo"
+          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition-colors"
+        >
+          <SendHorizontal className="w-7 h-7" strokeWidth={1.8} />
         </button>
       </div>
 
-      {posts.map((data) => {
-        return (
-          <article
-            key={data.$id}
-            className="w-full bg-white border border-neutral-100 rounded-md mt-1"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2.5">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600">
-                  <div className="w-full h-full rounded-full bg-white p-[2px]">
-                    <img
-                      src={data.user.avatar}
-                      alt="profile"
-                      className="w-full h-full rounded-full object-cover"
-                    />
+      {!isLoading ? (
+        <>
+          {posts.map((data) => {
+            return (
+              <article
+                key={data.$id}
+                className="w-full bg-white border border-neutral-100 rounded-md mt-1"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600">
+                      <div className="w-full h-full rounded-full bg-white p-[2px]">
+                        <img
+                          src={data.user.avatar}
+                          alt="profile"
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+                    <div className="leading-tight">
+                      <p className="text-sm font-semibold text-neutral-900">
+                        {data.user.name}
+                      </p>
+                      <p className="text-xs text-neutral-500">
+                        {data.user.email}
+                      </p>
+                    </div>
                   </div>
+                  <MoreHorizontal className="w-5 h-5 text-neutral-700 cursor-pointer" />
                 </div>
-                <div className="leading-tight">
-                  <p className="text-sm font-semibold text-neutral-900">
-                    {data.user.name}
-                  </p>
-                  <p className="text-xs text-neutral-500">{data.user.email}</p>
+
+                {/* Image */}
+                {data.images && (
+                  <>
+                    <div
+                      className="relative w-full cursor-pointer overflow-hidden"
+                      onClick={handleImageTap}
+                    >
+                      <img
+                        src={data.images}
+                        alt="post"
+                        className="w-full h-full "
+                        draggable={true}
+                      />
+                      {showBurst && (
+                        <Heart
+                          className="absolute inset-0 m-auto w-24 h-24 text-white drop-shadow-lg animate-ping-once"
+                          fill="white"
+                          strokeWidth={0}
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Likes */}
+
+                {/* Caption */}
+                <div className="px-3 pt-1 mt-2 mb-2 text-sm text-neutral-900">
+                  "<span className="font- mr-1.5">{data.content}</span>"
+                  {/* <span className="text-neutral-500">
+                  {" "}
+                  #santorini #greece #travel
+                </span> */}
                 </div>
-              </div>
-              <MoreHorizontal className="w-5 h-5 text-neutral-700 cursor-pointer" />
-            </div>
 
-            {/* Image */}
-            <div
-              className="relative w-full aspect-square bg-neutral-200 select-none cursor-pointer overflow-hidden"
-              onClick={handleImageTap}
-            >
-              <img
-                src="https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80"
-                alt="post"
-                className="w-full h-full object-cover"
-                draggable={false}
-              />
-              {showBurst && (
-                <Heart
-                  className="absolute inset-0 m-auto w-24 h-24 text-white drop-shadow-lg animate-ping-once"
-                  fill="white"
-                  strokeWidth={0}
-                />
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-between px-3 pt-2.5">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={toggleLike}
-                  aria-label="Like"
-                  className="active:scale-90 transition-transform"
-                >
-                  <Heart
-                    className={`w-6 h-6 transition-colors ${
-                      liked ? "text-rose-500" : "text-neutral-900"
-                    }`}
-                    fill={liked ? "currentColor" : "none"}
-                    strokeWidth={1.8}
-                  />
-                </button>
-                <button
-                  onClick={() => getComments(data.$id)}
-                  aria-label="Comment"
-                  className="active:scale-90 transition-transform"
-                >
-                  <MessageCircle
-                    className="w-6 h-6 text-neutral-900"
-                    strokeWidth={1.8}
-                  />
-                </button>
-                <button
-                  aria-label="Share"
-                  className="active:scale-90 transition-transform"
-                >
-                  <Send
-                    className="w-6 h-6 text-neutral-900"
-                    strokeWidth={1.8}
-                  />
-                </button>
-                {/* {JSON.stringify(data.$id)} */}
-              </div>
-              {/* <button
+                {/* Actions */}
+                <div className="flex items-center justify-between px-3 pt-2.5">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={toggleLike}
+                      aria-label="Like"
+                      className="active:scale-90 transition-transform"
+                    >
+                      <Heart
+                        className={`w-6 h-6 transition-colors ${
+                          liked ? "text-rose-500" : "text-neutral-900"
+                        }`}
+                        fill={liked ? "currentColor" : "none"}
+                        strokeWidth={1.8}
+                      />
+                    </button>
+                    <button
+                      onClick={() => getComments(data.$id)}
+                      aria-label="Comment"
+                      className="active:scale-90 transition-transform"
+                    >
+                      <MessageCircle
+                        className="w-6 h-6 text-neutral-900"
+                        strokeWidth={1.8}
+                      />
+                    </button>
+                    <button
+                      aria-label="Share"
+                      className="active:scale-90 transition-transform"
+                    >
+                      <Send
+                        className="w-6 h-6 text-neutral-900"
+                        strokeWidth={1.8}
+                      />
+                    </button>
+                    {/* {JSON.stringify(data.$id)} */}
+                  </div>
+                  {/* <button
                   onClick={() => setSaved((s) => !s)}
                   aria-label="Save"
                   className="active:scale-90 transition-transform"
@@ -260,56 +340,115 @@ export default function Body({ onSelectComment }: BodyProps) {
                     strokeWidth={1.8}
                   />
                 </button> */}
-              <div className="px-3 pt-2 flex justify-end">
-                <button className="flex items-center text-sm font-semibold text-neutral-900">
-                  <Heart
-                    className={`w-4 h-4 mr-1 transition-colors ${
-                      liked ? "text-rose-500" : "text-neutral-900"
-                    }`}
-                    fill={liked ? "currentColor" : "currentColor"}
-                    strokeWidth={1.8}
-                  />
-                  {likeCount.toLocaleString()} likes
+                  <div className="px-3 pt-2 flex justify-end">
+                    <button className="flex items-center text-sm font-semibold text-neutral-900">
+                      <Heart
+                        className={`w-4 h-4 mr-1 transition-colors ${
+                          liked ? "text-rose-500" : "text-neutral-900"
+                        }`}
+                        fill={liked ? "currentColor" : "currentColor"}
+                        strokeWidth={1.8}
+                      />
+                      {likeCount.toLocaleString()} likes
+                    </button>
+                  </div>
+                </div>
+
+                {/* Comments */}
+                <button className="px-3 pt-1.5 text-sm text-neutral-500 block">
+                  {JSON.stringify(data.comments.length)}{" "}
+                  {data.comments.length > 1 ? <>comments</> : <>comment</>}
                 </button>
-              </div>
-            </div>
 
-            {/* Likes */}
+                {/* Timestamp */}
+                <p className="px-3 pt-1.5 pb-2 text-[11px] uppercase tracking-wide text-neutral-400">
+                  {data.$createdAt}
+                </p>
 
-            {/* Caption */}
-            <div className="px-3 pt-1 mt-2 mb-2 text-sm text-neutral-900">
-              "<span className="font- mr-1.5">{data.content}</span>"
-              {/* <span className="text-neutral-500">
-                  {" "}
-                  #santorini #greece #travel
-                </span> */}
-            </div>
+                {/* Add comment */}
+                <div className="flex items-center gap-2 px-3 py-2.5 border-t border-neutral-200">
+                  <input
+                    type="text"
+                    placeholder="Add a comment..."
+                    className="flex-1 text-sm outline-none placeholder:text-neutral-400"
+                  />
+                  <button className="text-sm font-semibold text-sky-500">
+                    Post
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </>
+      ) : (
+        <>
+          <div className="w-full animate-pulse">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <article
+                key={index}
+                className="w-full bg-white border border-neutral-200 rounded-md mt-2 overflow-hidden"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-neutral-200" />
 
-            {/* Comments */}
-            <button className="px-3 pt-1.5 text-sm text-neutral-500 block">
-              {JSON.stringify(data.comments.length)}{" "}
-              {data.comments.length > 1 ? <>comments</> : <>comment</>}
-            </button>
+                    <div className="space-y-2">
+                      <div className="h-3 w-28 rounded bg-neutral-200" />
+                      <div className="h-2 w-20 rounded bg-neutral-200" />
+                    </div>
+                  </div>
 
-            {/* Timestamp */}
-            <p className="px-3 pt-1.5 pb-2 text-[11px] uppercase tracking-wide text-neutral-400">
-              {data.$createdAt}
-            </p>
+                  <div className="w-5 h-5 rounded bg-neutral-200" />
+                </div>
 
-            {/* Add comment */}
-            <div className="flex items-center gap-2 px-3 py-2.5 border-t border-neutral-200">
-              <input
-                type="text"
-                placeholder="Add a comment..."
-                className="flex-1 text-sm outline-none placeholder:text-neutral-400"
-              />
-              <button className="text-sm font-semibold text-sky-500">
-                Post
-              </button>
-            </div>
-          </article>
-        );
-      })}
+                {/* Image */}
+                <div className="h-100 w-full bg-neutral-200" />
+
+                {/* Action buttons */}
+                <div className="flex justify-between items-center px-4 pt-3">
+                  <div className="flex gap-4">
+                    <div className="w-6 h-6 rounded-full bg-neutral-200" />
+                    <div className="w-6 h-6 rounded-full bg-neutral-200" />
+                    <div className="w-6 h-6 rounded-full bg-neutral-200" />
+                  </div>
+
+                  <div className="w-6 h-6 rounded-full bg-neutral-200" />
+                </div>
+
+                {/* Likes */}
+                <div className="px-4 pt-3">
+                  <div className="h-3 w-24 rounded bg-neutral-200" />
+                </div>
+
+                {/* Caption */}
+                <div className="px-4 pt-3 space-y-2">
+                  <div className="h-3 w-full rounded bg-neutral-200" />
+                  <div className="h-3 w-5/6 rounded bg-neutral-200" />
+                  <div className="h-3 w-2/3 rounded bg-neutral-200" />
+                </div>
+
+                {/* Comments */}
+                <div className="px-4 pt-3">
+                  <div className="h-3 w-28 rounded bg-neutral-200" />
+                </div>
+
+                {/* Timestamp */}
+                <div className="px-4 pt-2 pb-3">
+                  <div className="h-2 w-16 rounded bg-neutral-200" />
+                </div>
+
+                {/* Comment input */}
+                <div className="flex items-center gap-3 border-t border-neutral-200 px-4 py-3">
+                  <div className="w-8 h-8 rounded-full bg-neutral-200" />
+                  <div className="flex-1 h-9 rounded-full bg-neutral-200" />
+                  <div className="w-12 h-3 rounded bg-neutral-200" />
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
 
       <style>{`
         @keyframes ping-once {

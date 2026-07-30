@@ -8,6 +8,7 @@ import Body from "./body";
 import { useAuth } from "../providers";
 import { tablesDB } from "@/lib/appwrite";
 import { Query } from "appwrite";
+import NewsFeed from "./newspaper";
 
 type SettingsCompatProps = {
   onNavigate: () => void;
@@ -33,43 +34,33 @@ export default function Main() {
     setIsComment(true);
   };
 
+  useEffect(() => {
+    if (!user) return;
 
-useEffect(() => {
-  if (!user) return;
+    const fetchProfile = async () => {
+      try {
+        const result = await tablesDB.listRows({
+          databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
+          queries: [Query.equal("user_id", user.$id)]
+        });
 
-  const fetchProfile = async () => {
-    try {
-      const result = await tablesDB.listRows({
-        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-        tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-        queries: [
-          Query.equal("user_id", user.$id),
-        ],
-      });
+        setProfile(result.rows[0] ?? null);
+        // console.log(result.rows)
+      } catch (err) {
+        console.error(err);
+      }
+    };
 
-      setProfile(result.rows[0] ?? null);
-      // console.log(result.rows)
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  fetchProfile();
-}, [user]);
-
+    fetchProfile();
+  }, [user]);
   return (
     <div className="feather-app min-h-screen antialiased">
       {/* Fonts + design tokens, scoped to .feather-app so no inline-style TS friction */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
         .feather-app {
-          --paper: #F2EFE6;
-          --ink: #211D1A;
-          --ink-soft: #5B564C;
-          --fern: #2F4B3C;
-          --clay: #9C5B3C;
-          --brass: #B08D57;
-          --hairline: #DAD4C4;
+     
           font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
           background-color: var(--paper);
           color: var(--ink);
@@ -96,8 +87,8 @@ useEffect(() => {
         {/* LEFT SIDEBAR (Desktop) */}
         <aside className="hidden lg:flex flex-col pr-4">
           <div className="px-6 pt-6 pb-4 flex items-center gap-2">
-            <Feather className="h-5 w-5" style={{ color: "var(--fern)" }} />
-            <span className="font-display text-xl tracking-tight">
+            <Feather className="h-5 w-5 text-black" />
+            <span className="font-display text-xl text-black tracking-tight">
               Street GP
             </span>
           </div>
@@ -189,15 +180,18 @@ useEffect(() => {
 
           {/* Main Content */}
           <main className="flex-1 overflow-auto">
-            <Body onSelectComment={(comments) => openComments(comments)} />
+            <Body
+              onSelectComment={(comments) => openComments(comments)}
+              profile={profile}
+            />
           </main>
         </div>
 
         {/* COLUMN 3 - Desktop */}
         <div className="hidden md:flex flex-col p-5 h-screen overflow-auto">
-          {isComment && (
+          {isComment ? (
             <>
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-4 text-black">
                 <div
                   className="h-1.5 w-1.5 rounded-full"
                   style={{ backgroundColor: "var(--clay)" }}
@@ -206,6 +200,17 @@ useEffect(() => {
               </div>
 
               <Comments comments={selectedComment} />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-4 text-black">
+                <div
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: "var(--clay)" }}
+                />
+                <p className="font-display text-lg tracking-tight">News </p>
+              </div>
+              <NewsFeed />
             </>
           )}
         </div>

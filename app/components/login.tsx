@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "../providers";
 import { Eye, EyeOff, Loader2, Mail, Lock, User } from "lucide-react";
-
+// 993d152c02c24fa0980d20b09e3d6620
 export default function LoginPanel() {
   const { user, login, signup, googleLogin, logout, loading } = useAuth();
 
@@ -12,7 +12,9 @@ export default function LoginPanel() {
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState<"signin" | "signup" | "google" | null>(null);
+  const [submitting, setSubmitting] = useState<
+    "signin" | "signup" | "google" | null
+  >(null);
 
   if (loading) {
     return (
@@ -22,26 +24,10 @@ export default function LoginPanel() {
     );
   }
 
-  if (user) {
-    return (
-      <div className="text-center space-y-6 max-w-sm mx-auto">
-        <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-semibold shadow-md">
-          {(user.name || user.email).charAt(0).toUpperCase()}
-        </div>
-        <div className="space-y-1">
-          <p className="text-gray-500 text-sm">Welcome back</p>
-          <p className="text-lg font-semibold text-gray-900">
-            {user.name || user.email}
-          </p>
-        </div>
-        <button
-          onClick={logout}
-          className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 active:scale-[0.98] transition shadow-sm"
-        >
-          Sign Out
-        </button>
-      </div>
-    );
+
+ if (user) {
+    window.location.href = "/components/";
+    return;
   }
 
   const handleGoogle = async () => {
@@ -136,17 +122,6 @@ export default function LoginPanel() {
 
       {/* Form fields */}
       <div className="space-y-3.5">
-        {/* Name */}
-        <div className="relative">
-          <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Full Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
-          />
-        </div>
 
         {/* Email */}
         <div className="relative">
@@ -187,7 +162,7 @@ export default function LoginPanel() {
         </div>
 
         {/* Create Account */}
-        <button
+        {/* <button
           type="button"
           onClick={handleSignup}
           disabled={submitting !== null}
@@ -197,7 +172,7 @@ export default function LoginPanel() {
             <Loader2 className="w-4 h-4 animate-spin" />
           )}
           Create Account
-        </button>
+        </button> */}
 
         {/* Sign In */}
         <button
