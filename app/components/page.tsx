@@ -192,10 +192,7 @@ export default function Main() {
           {isComment ? (
             <>
               <div className="flex items-center gap-2 mb-4 text-black">
-                <div
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: "var(--clay)" }}
-                />
+                <div className="h-1.5 w-1.5 rounded-full" />
                 <p className="font-display text-lg tracking-tight">Comments</p>
               </div>
 
@@ -257,8 +254,10 @@ export default function Main() {
                 <div className="w-6" />
               </div>
 
-              <div className="overflow-auto h-[calc(78vh-80px)] px-5 pb-5">
-                <Comments comments={selectedComment} />
+              <div className="overflow-auto h-[calc(88vh-80px)] bg-white rounded-t-xl px-5 pb-5">
+                <div className="mt-5">
+                  <Comments comments={selectedComment} />
+                </div>
               </div>
             </div>
           </>
