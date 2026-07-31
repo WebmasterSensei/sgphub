@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useAuth } from "../providers";
-import { Eye, EyeOff, Loader2, Mail, Lock, User } from "lucide-react";
-// 993d152c02c24fa0980d20b09e3d6620
+import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react";
+
+const SIDE_IMAGE =
+  "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1400&q=80";
+
 export default function LoginPanel() {
   const { user, login, signup, googleLogin, logout, loading } = useAuth();
 
@@ -18,16 +21,15 @@ export default function LoginPanel() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+      <div className="w-full h-screen flex items-center justify-center bg-[#0B0B0E]">
+        <Loader2 className="w-7 h-7 animate-spin text-[#6C63FF]" />
       </div>
     );
   }
 
-
- if (user) {
+  if (user) {
     window.location.href = "/components/";
-    return;
+    return null;
   }
 
   const handleGoogle = async () => {
@@ -74,118 +76,143 @@ export default function LoginPanel() {
   };
 
   return (
-    <div className="max-w-sm mx-auto space-y-6">
-      {/* Header */}
-      <div className="text-center space-y-1.5">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-          Welcome
-        </h1>
-        <p className="text-sm text-gray-500">
-          Sign in to your account or create a new one
-        </p>
-      </div>
+    <div className="flex min-h-screen w-full flex-col lg:flex-row bg-[#0B0B0E]">
+      {/* Form side */}
+      <div className="flex w-full flex-1 items-center justify-center px-6 py-12 sm:px-10 lg:w-1/2 lg:px-16">
+        <div className="w-full max-w-sm space-y-7">
+          {/* Header */}
+          <div className="space-y-1.5">
+            <h1 className="text-[26px] font-semibold tracking-tight text-white">
+              Welcome back
+            </h1>
+            <p className="text-[14px] text-white/50">
+              Sign in to your account to continue
+            </p>
+          </div>
 
-      {/* Error */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
-          {error}
-        </div>
-      )}
+          {/* Error */}
+          {error && (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {error}
+            </div>
+          )}
 
-      {/* Google */}
-      <button
-        type="button"
-        onClick={handleGoogle}
-        disabled={submitting !== null}
-        className="w-full flex items-center justify-center gap-3 border border-gray-300 bg-white py-3 rounded-xl hover:bg-gray-50 font-medium text-gray-800 transition disabled:opacity-60 shadow-sm"
-      >
-        {submitting === "google" ? (
-          <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
-        ) : (
-          <img
-            src="https://www.google.com/favicon.ico"
-            alt=""
-            className="w-5 h-5"
-          />
-        )}
-        Continue with Google
-      </button>
-
-      {/* Divider */}
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-gray-200" />
-        <span className="text-xs uppercase tracking-wider text-gray-400 font-medium">
-          or
-        </span>
-        <div className="h-px flex-1 bg-gray-200" />
-      </div>
-
-      {/* Form fields */}
-      <div className="space-y-3.5">
-
-        {/* Email */}
-        <div className="relative">
-          <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="email"
-            placeholder="Email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
-          />
-        </div>
-
-        {/* Password */}
-        <div className="relative">
-          <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type={showPassword ? "text" : "password"}
-            placeholder="Password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full pl-10 pr-11 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition"
-          />
+          {/* Google */}
           <button
             type="button"
-            onClick={() => setShowPassword((s) => !s)}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-            tabIndex={-1}
+            onClick={handleGoogle}
+            disabled={submitting !== null}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] py-3 font-medium text-white transition hover:bg-white/[0.07] disabled:opacity-60"
           >
-            {showPassword ? (
-              <EyeOff className="w-4 h-4" />
+            {submitting === "google" ? (
+              <Loader2 className="h-5 w-5 animate-spin text-white/70" />
             ) : (
-              <Eye className="w-4 h-4" />
+              <img
+                src="https://www.google.com/favicon.ico"
+                alt=""
+                className="h-5 w-5"
+              />
             )}
+            Continue with Google
           </button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[11px] font-medium uppercase tracking-wider text-white/30">
+              or
+            </span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+
+          {/* Form fields */}
+          <div className="space-y-3.5">
+            {/* Email */}
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+              <input
+                type="email"
+                placeholder="Email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-10 pr-4 text-white placeholder:text-white/35 transition focus:border-[#6C63FF]/60 focus:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/25"
+              />
+            </div>
+
+            {/* Password */}
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-10 pr-11 text-white placeholder:text-white/35 transition focus:border-[#6C63FF]/60 focus:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/25"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/35 transition hover:text-white/70"
+                tabIndex={-1}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+
+            {/* Create Account */}
+            {/* <button
+              type="button"
+              onClick={handleSignup}
+              disabled={submitting !== null}
+              className="w-full flex items-center justify-center gap-2 bg-[#6C63FF] text-white py-3 rounded-xl font-medium hover:bg-[#5A52E0] active:scale-[0.98] transition disabled:opacity-60 shadow-sm mt-1"
+            >
+              {submitting === "signup" && (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              )}
+              Create Account
+            </button> */}
+
+            {/* Sign In */}
+            <button
+              type="button"
+              onClick={handleLogin}
+              disabled={submitting !== null}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6C63FF] py-3 font-medium text-white shadow-sm shadow-[#6C63FF]/20 transition hover:bg-[#5A52E0] active:scale-[0.98] disabled:opacity-60"
+            >
+              {submitting === "signin" && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Sign In
+            </button>
+          </div>
         </div>
+      </div>
 
-        {/* Create Account */}
-        {/* <button
-          type="button"
-          onClick={handleSignup}
-          disabled={submitting !== null}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 active:scale-[0.98] transition disabled:opacity-60 shadow-sm mt-1"
-        >
-          {submitting === "signup" && (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          )}
-          Create Account
-        </button> */}
+      {/* Image side — hidden below lg, revealed on large screens */}
+      <div className="relative hidden w-1/2 lg:block">
+        <img
+          src={SIDE_IMAGE}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0B0B0E]/40 to-transparent" />
 
-        {/* Sign In */}
-        <button
-          type="button"
-          onClick={handleLogin}
-          disabled={submitting !== null}
-          className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white py-3 rounded-xl font-medium hover:bg-black active:scale-[0.98] transition disabled:opacity-60 shadow-sm"
-        >
-          {submitting === "signin" && (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          )}
-          Sign In
-        </button>
+        <div className="relative flex h-full flex-col justify-end p-12">
+          <p className="max-w-md text-[22px] font-medium leading-snug text-white">
+            "Switching over took an afternoon. It felt like the product had
+            always worked this way."
+          </p>
+          <p className="mt-4 text-[14px] text-white/60">
+            Amara Chen · Head of Product
+          </p>
+        </div>
       </div>
     </div>
   );

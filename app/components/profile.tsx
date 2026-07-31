@@ -49,9 +49,11 @@ export default function Settings({ onNavigate, authUser }: SettingsProps) {
 
           <div className="min-w-0">
             <h2 className="truncate font-semibold text-neutral-900">
-             {authUser?.name}
+              {authUser?.name}
             </h2>
-            <p className="truncate text-sm text-neutral-500">{authUser?.email}</p>
+            <p className="truncate text-sm text-neutral-500">
+              {authUser?.email}
+            </p>
           </div>
         </div>
       </div>
@@ -81,19 +83,15 @@ export default function Settings({ onNavigate, authUser }: SettingsProps) {
             label="Language & region"
             onClick={onNavigate}
           />
+          <button
+            onClick={logout}
+            className="flex ml-1 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-neutral-500 transition-colors hover:bg-red-50 hover:text-red-600"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Log out</span>
+          </button>
         </ul>
       </nav>
-
-      {/* Footer */}
-      <div className="border-t border-neutral-100 p-4">
-        <button
-          onClick={logout}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-neutral-500 transition-colors hover:bg-red-50 hover:text-red-600"
-        >
-          <LogOut className="h-4 w-4" />
-          <span>Log out</span>
-        </button>
-      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { useAuth } from "../providers";
 import { tablesDB } from "@/lib/appwrite";
 import { Query } from "appwrite";
 import NewsFeed from "./newspaper";
+import { useRouter } from "next/navigation";
 
 type SettingsCompatProps = {
   onNavigate: () => void;
@@ -20,7 +21,8 @@ function SettingsCompat({ onNavigate, authUser }: SettingsCompatProps) {
 }
 
 export default function Main() {
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, loading } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isColumn3Open, setIsColumn3Open] = useState(false);
   const [isComment, setIsComment] = useState<boolean>(false);
@@ -35,6 +37,13 @@ export default function Main() {
   };
 
   useEffect(() => {
+    
+    if (loading) return;
+
+    if (!user) {
+      router.replace("/");
+    }
+    
     if (!user) return;
 
     const fetchProfile = async () => {
@@ -53,7 +62,7 @@ export default function Main() {
     };
 
     fetchProfile();
-  }, [user]);
+  }, [user, loading, router]);
   return (
     <div className="feather-app min-h-screen antialiased">
       {/* Fonts + design tokens, scoped to .feather-app so no inline-style TS friction */}
@@ -118,7 +127,6 @@ export default function Main() {
             <span className="font-display text-xl text-black">Feather</span>
           </div>
           <Settings
-    
             onNavigate={() => setIsSidebarOpen(false)}
             authUser={profile}
           />
@@ -147,10 +155,7 @@ export default function Main() {
             </button>
 
             <div className="flex items-center gap-2.5">
-              <div
-                className="h-8 w-8 overflow-hidden text-black rounded-full"
-              >
-             
+              <div className="h-8 w-8 overflow-hidden text-black rounded-full">
                 <img
                   src={profile?.avatar}
                   alt="Alex Rivera"
@@ -161,11 +166,7 @@ export default function Main() {
                 <p className="text-sm font-semibold font-display text-black">
                   {user?.name}
                 </p>
-                <p
-                  className="text-xs font-mono text-black"
-                >
-                  {user?.email}
-                </p>
+                <p className="text-xs font-mono text-black">{user?.email}</p>
               </div>
             </div>
 
@@ -189,7 +190,6 @@ export default function Main() {
 
         {/* COLUMN 3 - Desktop */}
         <div className="hidden md:flex flex-col p-5 h-screen overflow-auto">
-          
           {isComment ? (
             <>
               <div className="flex items-center gap-2 mb-4 text-black">
