@@ -14,6 +14,11 @@ import {
 } from "lucide-react";
 import { useAuth } from "../providers";
 
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime);
+
 type BodyProps = {
   onSelectComment: (comments: any[]) => void;
   profile: any;
@@ -26,6 +31,7 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
   const [posts, getPosts] = useState<any[]>([]);
   const [isLoading, gettingPost] = useState<boolean>(false);
   const [postValue, setPostValue] = useState<string>("");
+  const [commentValue, setCommentValue] = useState<string>("");
   const { user } = useAuth();
   // const [comments, getCommentsData] = useState<any[]>([]);
   const lastTap = useRef(0);
@@ -100,6 +106,66 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
       });
 
       setPostValue("");
+      fetchRows(); // Reload the posts
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const submitComment = async (postId: string) => {
+    if (!user) {
+      alert("Please log in first.");
+      return;
+    }
+
+    if (!commentValue.trim()) {
+      alert("Post cannot be empty.");
+      return;
+    }
+
+    try {
+      await tablesDB.createRow({
+        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
+        rowId: ID.unique(),
+        data: {
+          comments: commentValue.trim(),
+          user_id: user.$id,
+          post_id: postId
+        }
+      });
+
+      setCommentValue("");
+      try {
+        const result = await tablesDB.listRows({
+          databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
+          queries: [
+            Query.equal("post_id", postId),
+            Query.orderDesc("$createdAt")
+          ]
+        });
+
+        const commentsWithUsers = await Promise.all(
+          result.rows.map(async (comment) => {
+            const profile = await tablesDB.listRows({
+              databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+              tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
+              queries: [Query.equal("user_id", comment.user_id)]
+            });
+
+            return {
+              ...comment,
+              user: profile.rows[0] ?? null
+            };
+          })
+        );
+
+        onSelectComment(commentsWithUsers);
+      } catch (error) {
+        console.error(error);
+        return [];
+      }
       fetchRows(); // Reload the posts
     } catch (error) {
       console.error(error);
@@ -294,18 +360,18 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
 
                 {/* Actions */}
                 <div className="flex items-center justify-between px-3 pt-2.5">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <button
                       onClick={toggleLike}
                       aria-label="Like"
                       className="active:scale-90 transition-transform"
                     >
                       <Heart
-                        className={`w-6 h-6 transition-colors ${
+                        className={`w-5 h-5 transition-colors cursor-pointer ${
                           liked ? "text-rose-500" : "text-neutral-900"
                         }`}
                         fill={liked ? "currentColor" : "none"}
-                        strokeWidth={1.8}
+                        strokeWidth={2.3}
                       />
                     </button>
                     <button
@@ -314,19 +380,11 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
                       className="active:scale-90 transition-transform"
                     >
                       <MessageCircle
-                        className="w-6 h-6 text-neutral-900"
-                        strokeWidth={1.8}
+                        className="w-5 h-5 text-neutral-900 cursor-pointer"
+                        strokeWidth={2.3}
                       />
                     </button>
-                    <button
-                      aria-label="Share"
-                      className="active:scale-90 transition-transform"
-                    >
-                      <Send
-                        className="w-6 h-6 text-neutral-900"
-                        strokeWidth={1.8}
-                      />
-                    </button>
+
                     {/* {JSON.stringify(data.$id)} */}
                   </div>
                   {/* <button
@@ -341,7 +399,7 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
                   />
                 </button> */}
                   <div className="px-3 pt-2 flex justify-end">
-                    <button className="flex items-center text-sm font-semibold text-neutral-900">
+                    <button className="flex items-center text-sm font-semibold text-neutral-900 cursor-pointer">
                       <Heart
                         className={`w-4 h-4 mr-1 transition-colors ${
                           liked ? "text-rose-500" : "text-neutral-900"
@@ -355,25 +413,33 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
                 </div>
 
                 {/* Comments */}
-                <button className="px-3 pt-1.5 text-sm text-neutral-500 block">
+                <button
+                  className="px-3 pt-1.5 text-sm text-neutral-500 block cursor-pointer"
+                  onClick={() => getComments(data.$id)}
+                >
                   {JSON.stringify(data.comments.length)}{" "}
                   {data.comments.length > 1 ? <>comments</> : <>comment</>}
                 </button>
 
                 {/* Timestamp */}
-                <p className="px-3 pt-1.5 pb-2 text-[11px] uppercase tracking-wide text-neutral-400">
-                  {data.$createdAt}
+                <p className="px-3 pt-1.5 pb-2 text-[11px] tracking-wide text-neutral-600">
+                  {dayjs(data.$createdAt).fromNow()}
                 </p>
 
                 {/* Add comment */}
                 <div className="flex items-center gap-2 px-3 py-2.5 border-t border-neutral-200">
                   <input
                     type="text"
+                    value={commentValue}
+                    onChange={(e) => setCommentValue(e.target.value)}
                     placeholder="Add a comment..."
-                    className="flex-1 text-sm outline-none placeholder:text-neutral-400"
+                    className="flex-1 text-sm outline-none text-black placeholder:text-black"
                   />
-                  <button className="text-sm font-semibold text-sky-500">
-                    Post
+                  <button
+                    className="text-sm font-semibold text-black"
+                    onClick={() => submitComment(data.$id)}
+                  >
+                    <SendHorizontal />
                   </button>
                 </div>
               </article>

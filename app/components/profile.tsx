@@ -32,7 +32,7 @@ export default function Settings({ onNavigate, authUser }: SettingsProps) {
   };
 
   return (
-    <div className="flex h-full flex-col lg:sticky lg:top-0P">
+    <div className="flex h-full flex-col lg:sticky lg:top-0P bg-white">
       {/* Profile quick view */}
       <div className="border-b border-neutral-100 p-6">
         <div className="flex items-center gap-3.5">

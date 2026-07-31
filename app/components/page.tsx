@@ -23,7 +23,7 @@ export default function Main() {
   const { user } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isColumn3Open, setIsColumn3Open] = useState(false);
-  const [isComment, setIsComment] = useState(false);
+  const [isComment, setIsComment] = useState<boolean>(false);
   const [profile, setProfile] = useState<any>(null);
 
   const [selectedComment, setSelectedComment] = useState<any>(null);
@@ -113,11 +113,12 @@ export default function Main() {
             borderRight: "1px solid var(--hairline)"
           }}
         >
-          <div className="px-6 pt-6 pb-4 flex items-center gap-2">
-            <Feather className="h-5 w-5" style={{ color: "var(--fern)" }} />
-            <span className="font-display text-xl tracking-tight">Feather</span>
+          <div className="px-6 pt-6 pb-4 flex items-center gap-2 bg-white">
+            <Feather className="h-5 w-5 text-black" />
+            <span className="font-display text-xl text-black">Feather</span>
           </div>
           <Settings
+    
             onNavigate={() => setIsSidebarOpen(false)}
             authUser={profile}
           />
@@ -135,7 +136,7 @@ export default function Main() {
           >
             <button
               onClick={() => setIsSidebarOpen((v) => !v)}
-              className="rounded-full p-2 transition-colors"
+              className="rounded-full p-2  text-black"
               aria-label="Toggle menu"
             >
               {isSidebarOpen ? (
@@ -147,22 +148,21 @@ export default function Main() {
 
             <div className="flex items-center gap-2.5">
               <div
-                className="h-8 w-8 overflow-hidden rounded-full"
-                style={{ boxShadow: "0 0 0 1.5px var(--brass)" }}
+                className="h-8 w-8 overflow-hidden text-black rounded-full"
               >
+             
                 <img
-                  src="https://picsum.photos/id/64/300/300"
+                  src={profile?.avatar}
                   alt="Alex Rivera"
                   className="h-full w-full object-cover"
                 />
               </div>
               <div className="leading-tight">
-                <p className="text-sm font-semibold font-display">
+                <p className="text-sm font-semibold font-display text-black">
                   {user?.name}
                 </p>
                 <p
-                  className="text-xs font-mono"
-                  style={{ color: "var(--ink-soft)" }}
+                  className="text-xs font-mono text-black"
                 >
                   {user?.email}
                 </p>
@@ -189,13 +189,13 @@ export default function Main() {
 
         {/* COLUMN 3 - Desktop */}
         <div className="hidden md:flex flex-col p-5 h-screen overflow-auto">
+          
           {isComment ? (
             <>
               <div className="flex items-center gap-2 mb-4 text-black">
                 <div className="h-1.5 w-1.5 rounded-full" />
                 <p className="font-display text-lg tracking-tight">Comments</p>
               </div>
-
               <Comments comments={selectedComment} />
             </>
           ) : (

@@ -1,10 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Heart,
   MessageCircle,
   MoreHorizontal,
-  ChevronDown,
+  ChevronDown
 } from "lucide-react";
 
 // ---- helpers -----------------------------------------------------
@@ -23,7 +23,7 @@ function toggleLike(comments: any[], id: string | number): any[] {
       return {
         ...c,
         liked,
-        react: liked ? (c.react || 0) + 1 : Math.max((c.react || 0) - 1, 0),
+        react: liked ? (c.react || 0) + 1 : Math.max((c.react || 0) - 1, 0)
       };
     }
     if (c.replies?.length) {
@@ -38,7 +38,7 @@ function toggleLike(comments: any[], id: string | number): any[] {
 function CommentItem({
   comment,
   depth = 0,
-  onLike,
+  onLike
 }: {
   comment: any;
   depth?: number;
@@ -49,7 +49,7 @@ function CommentItem({
 
   return (
     <div className={`${depth > 0 ? "ml-4 sm:ml-6" : ""}`}>
-      <div className="group flex gap-3 rounded-xl border border-transparent p-3 transition hover:border-white/10 hover:bg-white/5">
+      <div className="group flex gap-3 rounded-xl border border-transparent p-2 transition hover:border-white/10 hover:bg-white/5">
         {/* avatar */}
         <img
           src={comment.user?.avatar || "/default-avatar.png"}
@@ -69,7 +69,7 @@ function CommentItem({
               {comment.$updatedAt
                 ? new Date(comment.$updatedAt).toLocaleDateString(undefined, {
                     month: "short",
-                    day: "numeric",
+                    day: "numeric"
                   })
                 : ""}
             </span>
@@ -99,7 +99,7 @@ function CommentItem({
           )}
 
           {/* actions */}
-          <div className="mt-2.5 flex items-center gap-5 text-neutral-500">
+          <div className="mt-1.5 flex justify-start gap-1 text-neutral-500">
             <button
               onClick={() => onLike(comment.$id || comment.id)}
               className="group/btn flex items-center gap-1.5"
@@ -111,7 +111,7 @@ function CommentItem({
                     ? "fill-rose-500 stroke-rose-500"
                     : "stroke-current"
                 }`}
-                strokeWidth={1.8}
+                strokeWidth={2.8}
               />
               <span
                 className={`text-[12.5px] sm:text-[13px] ${
@@ -128,7 +128,7 @@ function CommentItem({
             >
               <MessageCircle
                 className="h-[18px] w-[18px] transition-transform group-active/btn:scale-90"
-                strokeWidth={1.8}
+                strokeWidth={2.8}
               />
               <span className="text-[12.5px] sm:text-[13px]">
                 {hasReplies ? formatCount(comment.replies.length) : ""}
@@ -177,13 +177,22 @@ function CommentItem({
 
 // ---- root component -----------------------------------------------------
 
-export default function Comments({ comments: initialComments }: { comments: any[] }) {
+export default function Comments({
+  comments: initialComments
+}: {
+  comments: any[];
+}) {
+  // alert();
+
   const [comments, setComments] = useState(initialComments || []);
 
   const handleLike = (id: string | number) => {
     setComments((prev) => toggleLike(prev, id));
   };
 
+  useEffect(() => {
+    setComments(initialComments);
+  }, [initialComments]);
   return (
     <div className="flex h-full flex-col">
       <div
@@ -198,9 +207,14 @@ export default function Comments({ comments: initialComments }: { comments: any[
       >
         {comments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <MessageCircle className="mb-3 h-8 w-8 text-neutral-300" strokeWidth={1.5} />
+            <MessageCircle
+              className="mb-3 h-8 w-8 text-neutral-300"
+              strokeWidth={1.5}
+            />
             <p className="text-sm text-neutral-500">No comments yet</p>
-            <p className="mt-1 text-xs text-neutral-400">Be the first to share your thoughts</p>
+            <p className="mt-1 text-xs text-neutral-400">
+              Be the first to share your thoughts
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-1 pb-6">
