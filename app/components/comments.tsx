@@ -7,6 +7,11 @@ import {
   ChevronDown
 } from "lucide-react";
 
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime);
+
 // ---- helpers -----------------------------------------------------
 
 function formatCount(n: number | string | undefined) {
@@ -64,14 +69,8 @@ function CommentItem({
             <span className="truncate font-semibold text-neutral-900">
               {comment.user?.name || "Anonymous"}
             </span>
-            <span className="text-neutral-400">·</span>
-            <span className="whitespace-nowrap text-neutral-400 text-xs sm:text-sm">
-              {comment.$updatedAt
-                ? new Date(comment.$updatedAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric"
-                  })
-                : ""}
+            <span className="whitespace-nowrap text-neutral-400 text-[10px] sm:text-[12px]">
+              {comment.$updatedAt ? dayjs(comment.$updatedAt).fromNow() : ""}
             </span>
 
             <button
@@ -83,7 +82,7 @@ function CommentItem({
           </div>
 
           {/* text */}
-          <p className="mt-0.5 text-[13px] sm:text-[15px] leading-snug text-neutral-800 break-words">
+          <p className="mt-0.5 text-[12px] sm:text-[13px] leading-snug text-neutral-800 break-words">
             {comment.comments}
           </p>
 
