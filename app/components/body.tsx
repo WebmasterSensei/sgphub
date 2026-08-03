@@ -31,7 +31,9 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
   const [posts, getPosts] = useState<any[]>([]);
   const [isLoading, gettingPost] = useState<boolean>(false);
   const [postValue, setPostValue] = useState<string>("");
-  const [commentValue, setCommentValue] = useState<string>("");
+  const [commentValues, setCommentValues] = useState<Record<string, string>>(
+    {}
+  );
   const { user } = useAuth();
   // const [comments, getCommentsData] = useState<any[]>([]);
   const lastTap = useRef(0);
@@ -118,8 +120,10 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
       return;
     }
 
-    if (!commentValue.trim()) {
-      alert("Post cannot be empty.");
+    const comment = commentValues[postId]?.trim();
+    
+    if (!comment) {
+      alert("Comment cannot be empty.");
       return;
     }
 
@@ -129,13 +133,16 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
         tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
         rowId: ID.unique(),
         data: {
-          comments: commentValue.trim(),
+          comments: comment,
           user_id: user.$id,
           post_id: postId
         }
       });
 
-      setCommentValue("");
+      setCommentValues((prev) => ({
+        ...prev,
+        [postId]: ""
+      }));
       try {
         const result = await tablesDB.listRows({
           databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -430,8 +437,13 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
                 <div className="flex items-center gap-2 px-3 py-2.5 border-t border-neutral-200">
                   <input
                     type="text"
-                    value={commentValue}
-                    onChange={(e) => setCommentValue(e.target.value)}
+                    value={commentValues[data.$id] || ""}
+                    onChange={(e) =>
+                      setCommentValues((prev) => ({
+                        ...prev,
+                        [data.$id]: e.target.value
+                      }))
+                    }
                     placeholder="Add a comment..."
                     className="flex-1 text-sm outline-none text-black placeholder:text-black"
                   />

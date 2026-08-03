@@ -1,39 +1,51 @@
 // components/NewsFeed.tsx
 import { useState, useEffect } from "react";
 
-const NEWS_API_KEY = "993d152c02c24fa0980d20b09e3d6620"; // get free key at https://newsapi.org/register
+// Get a free key at: https://console.cloud.google.com/ → Enable YouTube Data API v3
+const YOUTUBE_API_KEY = process.env.NEXT_PUBLIC_YOUTUBE_APIKEY;
 
-interface Article {
-  title: string;
-  description: string | null;
-  url: string;
-  urlToImage: string | null;
-  source: { name: string };
-  publishedAt: string;
+interface Video {
+  id: { videoId: string };
+  snippet: {
+    title: string;
+    description: string;
+    thumbnails: {
+      medium: { url: string };
+      high?: { url: string };
+    };
+    channelTitle: string;
+    publishedAt: string;
+  };
 }
 
 export default function NewsFeed() {
-  const [articles, setArticles] = useState<Article[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
+
   useEffect(() => {
-    async function fetchNews() {
+    async function fetchStreetGPVideos() {
       try {
         setLoading(true);
         setError(null);
 
+        // Search for Street GP related videos
+        const query = encodeURIComponent("Street GP");
         const res = await fetch(
-          `https://newsapi.org/v2/top-headlines?country=us&pageSize=10&apiKey=${NEWS_API_KEY}`
+          `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&maxResults=12&order=relevance&key=${YOUTUBE_API_KEY}`
         );
 
-        if (!res.ok) throw new Error(`News API error: ${res.status}`);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData.error?.message || `YouTube API error: ${res.status}`
+          );
+        }
 
         const data = await res.json();
-        if (data.status !== "ok")
-          throw new Error(data.message || "Failed to load news");
-
-        setArticles(data.articles || []);
+        setVideos(data.items || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
@@ -41,30 +53,22 @@ export default function NewsFeed() {
       }
     }
 
-    fetchNews();
+    fetchStreetGPVideos();
   }, []);
 
   if (loading) {
     return (
       <div className="w-full animate-pulse">
-        {Array.from({ length: 5 }).map((_, index) => (
+        {Array.from({ length: 6 }).map((_, index) => (
           <div
             key={index}
             className="flex gap-4 p-4 border-b border-neutral-200"
           >
-            {/* Thumbnail */}
-            <div className="w-24 h-24 rounded-lg bg-neutral-200 shrink-0" />
-
-            {/* Content */}
+            <div className="w-40 h-24 rounded-lg bg-neutral-200 shrink-0" />
             <div className="flex-1 space-y-3">
               <div className="h-4 w-3/4 rounded bg-neutral-200" />
               <div className="h-4 w-full rounded bg-neutral-200" />
-              <div className="h-4 w-5/6 rounded bg-neutral-200" />
-
-              <div className="flex items-center gap-3 pt-2">
-                <div className="h-3 w-16 rounded bg-neutral-200" />
-                <div className="h-3 w-12 rounded bg-neutral-200" />
-              </div>
+              <div className="h-3 w-1/3 rounded bg-neutral-200" />
             </div>
           </div>
         ))}
@@ -77,7 +81,8 @@ export default function NewsFeed() {
       <div className="text-sm text-red-500 py-4">
         {error}
         <p className="mt-2 text-xs opacity-70">
-          Free tier only works on localhost. Get a key at newsapi.org
+          Make sure you have a valid YouTube Data API key and that the API is
+          enabled in Google Cloud Console.
         </p>
       </div>
     );
@@ -85,40 +90,41 @@ export default function NewsFeed() {
 
   return (
     <div className="flex flex-col gap-4">
-      {articles.map((article, i) => (
+      {videos.map((video) => (
         <a
-          key={i}
-          href={article.url}
+          key={video.id.videoId}
+          href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="group block rounded-sm border border-white/10 p-3 transition hover:bg-white/5"
+          className="group flex gap-4 rounded-sm border border-white/10 p-3 transition hover:bg-white/5"
         >
-          {article.urlToImage && (
-            <img
-              src={article.urlToImage}
-              alt=""
-              className="mb-3 h-32 w-full rounded-sm object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          )}
-          <p className="font-medium leading-snug group-hover:underline text-black">
-            {article.title}
-          </p>
-          {article.description && (
-            <p className="mt-1 line-clamp-2 text-sm text-black">
-              {article.description}
+          <img
+            src={
+              video.snippet.thumbnails.high?.url ||
+              video.snippet.thumbnails.medium.url
+            }
+            alt=""
+            className="h-24 w-40 rounded-xl object-cover shrink-0"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium leading-snug group-hover:underline text-black line-clamp-2">
+              {video.snippet.title}
             </p>
-          )}
-          <div className="mt-2 flex items-center  justify-between text-xs text-black">
-            <span>{article.source.name}</span>
-            <span>
-              {new Date(article.publishedAt).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric"
-              })}
-            </span>
+            <p className="mt-1 line-clamp-2 text-sm text-neutral-600">
+              {video.snippet.description}
+            </p>
+            <div className="mt-2 flex items-center justify-between text-xs text-neutral-500">
+              <span>{video.snippet.channelTitle}</span>
+              <span>
+                {new Date(video.snippet.publishedAt).toLocaleDateString(
+                  undefined,
+                  { month: "short", day: "numeric" }
+                )}
+              </span>
+            </div>
           </div>
         </a>
       ))}

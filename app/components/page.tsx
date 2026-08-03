@@ -205,7 +205,7 @@ export default function Main() {
                   className="h-1.5 w-1.5 rounded-full"
                   style={{ backgroundColor: "var(--clay)" }}
                 />
-                <p className="font-display text-lg tracking-tight">News </p>
+                <p className="font-display text-lg tracking-tight">Street Gp Topics</p>
               </div>
               <NewsFeed />
             </>
