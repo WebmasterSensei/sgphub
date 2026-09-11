@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+// components/Body.tsx — Instagram-style social feed
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Query, ID } from "appwrite";
 import { tablesDB } from "@/lib/appwrite";
 import {
@@ -7,12 +8,16 @@ import {
   Send,
   Bookmark,
   MoreHorizontal,
-  Plus,
-  Image as ImageIcon,
   SendHorizontal,
-  CirclePlus
+  Loader2
 } from "lucide-react";
 import { useAuth } from "../providers";
+import {
+  fetchProfilesByUserIds,
+  getPostStats,
+  hasLiked,
+  togglePostLike
+} from "@/lib/api";
 
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -22,38 +27,55 @@ dayjs.extend(relativeTime);
 type BodyProps = {
   onSelectComment: (comments: any[]) => void;
   profile: any;
+  onViewProfile: (profile: any) => void;
 };
-export default function Body({ onSelectComment, profile }: BodyProps) {
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [likeCount, setLikeCount] = useState(1284);
-  const [showBurst, setShowBurst] = useState(false);
-  const [posts, getPosts] = useState<any[]>([]);
-  const [isLoading, gettingPost] = useState<boolean>(false);
+
+type LikesState = Record<string, { liked: boolean; count: number }>;
+
+export default function Body({
+  onSelectComment,
+  profile,
+  onViewProfile
+}: BodyProps) {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [postValue, setPostValue] = useState<string>("");
   const [commentValues, setCommentValues] = useState<Record<string, string>>(
     {}
   );
+  const [likesState, setLikesState] = useState<LikesState>({});
+  const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [burstPost, setBurstPost] = useState<string | null>(null);
+  const [submittingPost, setSubmittingPost] = useState(false);
   const { user } = useAuth();
-  // const [comments, getCommentsData] = useState<any[]>([]);
-  const lastTap = useRef(0);
+  const lastTap = useRef<Record<string, number>>({});
 
-  const toggleLike = () => {
-    setLiked((prev) => {
-      setLikeCount((c) => (prev ? c - 1 : c + 1));
-      return !prev;
-    });
-  };
-
-  const handleImageTap = () => {
+  const handleImageTap = (postId: string, liked: boolean) => {
     const now = Date.now();
-    if (now - lastTap.current < 300) {
-      if (!liked) toggleLike();
-      setShowBurst(true);
-      setTimeout(() => setShowBurst(false), 700);
+    if (now - (lastTap.current[postId] ?? 0) < 300) {
+      if (!liked) handleLike(postId);
+      setBurstPost(postId);
+      setTimeout(() => setBurstPost(null), 700);
     }
-    lastTap.current = now;
+    lastTap.current[postId] = now;
   };
+
+  const handleLike = useCallback(
+    async (postId: string) => {
+      if (!user) return;
+      const current = likesState[postId] ?? { liked: false, count: 0 };
+      const optimistically = { liked: !current.liked, count: current.count + (current.liked ? -1 : 1) };
+      setLikesState((prev) => ({ ...prev, [postId]: optimistically }));
+      const nowLiked = await togglePostLike(postId, user.$id);
+      if (nowLiked !== optimistically.liked) {
+        setLikesState((prev) => ({
+          ...prev,
+          [postId]: { liked: nowLiked, count: current.count + (nowLiked ? 1 : 0) }
+        }));
+      }
+    },
+    [user, likesState]
+  );
 
   const getComments = async (postId: string) => {
     try {
@@ -63,25 +85,17 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
         queries: [Query.equal("post_id", postId), Query.orderDesc("$createdAt")]
       });
 
-      const commentsWithUsers = await Promise.all(
-        result.rows.map(async (comment) => {
-          const profile = await tablesDB.listRows({
-            databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-            tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-            queries: [Query.equal("user_id", comment.user_id)]
-          });
+      const commenterIds = result.rows.map((c: any) => c.user_id);
+      const profiles = await fetchProfilesByUserIds(commenterIds);
 
-          return {
-            ...comment,
-            user: profile.rows[0] ?? null
-          };
-        })
-      );
+      const commentsWithUsers = result.rows.map((comment: any) => ({
+        ...comment,
+        user: profiles[comment.user_id] ?? null
+      }));
 
       onSelectComment(commentsWithUsers);
     } catch (error) {
       console.error(error);
-      return [];
     }
   };
 
@@ -97,6 +111,7 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
     }
 
     try {
+      setSubmittingPost(true);
       await tablesDB.createRow({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
         tableId: process.env.NEXT_PUBLIC_APPWRITE_TABLE_ID!,
@@ -111,6 +126,8 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
       fetchRows(); // Reload the posts
     } catch (error) {
       console.error(error);
+    } finally {
+      setSubmittingPost(false);
     }
   };
 
@@ -121,7 +138,7 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
     }
 
     const comment = commentValues[postId]?.trim();
-    
+
     if (!comment) {
       alert("Comment cannot be empty.");
       return;
@@ -143,36 +160,7 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
         ...prev,
         [postId]: ""
       }));
-      try {
-        const result = await tablesDB.listRows({
-          databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-          tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
-          queries: [
-            Query.equal("post_id", postId),
-            Query.orderDesc("$createdAt")
-          ]
-        });
-
-        const commentsWithUsers = await Promise.all(
-          result.rows.map(async (comment) => {
-            const profile = await tablesDB.listRows({
-              databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-              tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-              queries: [Query.equal("user_id", comment.user_id)]
-            });
-
-            return {
-              ...comment,
-              user: profile.rows[0] ?? null
-            };
-          })
-        );
-
-        onSelectComment(commentsWithUsers);
-      } catch (error) {
-        console.error(error);
-        return [];
-      }
+      getComments(postId);
       fetchRows(); // Reload the posts
     } catch (error) {
       console.error(error);
@@ -180,205 +168,186 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
   };
 
   const fetchRows = async () => {
-    gettingPost(true);
+    setIsLoading(true);
     try {
       const postsResult = await tablesDB.listRows({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-        tableId: process.env.NEXT_PUBLIC_APPWRITE_TABLE_ID!
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_TABLE_ID!,
+        queries: [Query.orderDesc("$createdAt")]
       });
 
-      const postsWithData = await Promise.all(
-        postsResult.rows.map(async (post) => {
-          // Get the post author's profile
-          const postProfile = await tablesDB.listRows({
-            databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-            tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-            queries: [Query.equal("user_id", post?.user_id)]
-          });
+      const postRows = postsResult.rows as any[];
 
-          // Get comments
-          const commentsResult = await tablesDB.listRows({
-            databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-            tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
-            queries: [
-              Query.equal("post_id", post?.$id),
-              Query.orderDesc("$createdAt")
-            ]
-          });
+      const authorProfileMap = await fetchProfilesByUserIds(
+        postRows.map((p: any) => p.user_id)
+      );
 
-          // Attach profile to each comment
-          const commentsWithProfiles = await Promise.all(
-            commentsResult.rows.map(async (comment) => {
-              const commentProfile = await tablesDB.listRows({
-                databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-                tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-                queries: [Query.equal("user_id", comment?.user_id)]
-              });
-
-              return {
-                ...comment,
-                user: commentProfile.rows[0] ?? null
-              };
-            })
-          );
-          // gettingPost(true);
-
-          return {
-            ...post,
-            user: postProfile.rows[0] ?? null,
-            comments: commentsWithProfiles,
-            commentsCount: commentsResult.total
-          };
+      const likesMap: Record<string, { liked: boolean; count: number }> = {};
+      const stats = await Promise.all(
+        postRows.map(async (post: any) => {
+          const [stat, liked] = await Promise.all([
+            getPostStats(post.$id),
+            user ? hasLiked(post.$id, user.$id) : Promise.resolve(false)
+          ]);
+          likesMap[post.$id] = { liked, count: stat.likes };
+          return { ...post, commentsCount: stat.comments };
         })
       );
 
-      getPosts(postsWithData);
+      setPosts(
+        stats.map((post: any, index: number) => ({
+          ...post,
+          index,
+          user: authorProfileMap[post.user_id] ?? null
+        }))
+      );
+      setLikesState(likesMap);
     } catch (err) {
       console.error(err);
     } finally {
-      gettingPost(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const sharePost = async (content: string, postId: string) => {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/components/#post-${postId}`
+      );
+    } catch {}
+    alert(`Post copied to clipboard — "${content.slice(0, 40)}${content.length > 40 ? "…" : ""}"`);
+  };
+
   return (
-    <main className="flex-1 overflow-auto bg-neutral-100 flex flex-col items-center py-1">
-      {/* Sticky "add a post" bar — stays pinned while the feed below it scrolls */}
-      <div className="sticky top-0 z-30 w-full flex items-center gap-3 px-3.5 py-2.5 bg-white/90 backdrop-blur-md border-b border-neutral-200">
-        <div className="w-9 h-9 shrink-0 rounded-full overflow-hidden ring-1 ring-neutral-200">
-          <img
-            src={profile?.avatar}
-            alt="your profile"
-            className="w-full h-full object-cover"
-          />
+    <main className="flex flex-1 flex-col items-center overflow-auto bg-background">
+      {/* Sticky "create post" bar */}
+      <div className="sticky top-0 z-30 flex w-full max-w-[470px] items-center gap-3 border-b border-hairline bg-surface/90 px-3.5 py-2.5 backdrop-blur-md">
+        <div className="w-9 h-9 shrink-0 overflow-hidden rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-[2px]">
+          <button
+            onClick={() => onViewProfile(profile)}
+            className="block h-full w-full overflow-hidden rounded-full bg-background p-[2px]"
+          >
+            <img
+              src={profile?.avatar}
+              alt="your profile"
+              className="h-full w-full rounded-full object-cover"
+            />
+          </button>
         </div>
 
         <textarea
           placeholder="What's on your mind?"
           rows={1}
-          className="
-    flex-1
-    w-full
-    text-sm
-    text-neutral-800
-    placeholder:text-neutral-400
-    bg-neutral-100
-    hover:bg-neutral-200/70
-    focus:bg-white
-    rounded-2xl
-    px-5 py-3
-    border border-transparent
-    focus:border-neutral-300
-    focus:ring-2 focus:ring-neutral-200
-    outline-none
-    transition-all duration-200
-    shadow-sm
-    resize-none
-  "
+          className="flex-1 w-full resize-none rounded-2xl bg-surface-raised px-5 py-3 text-sm text-ink shadow-sm outline-none transition-all duration-200 border border-transparent placeholder:text-ink-muted hover:bg-hover focus:bg-surface focus:border-hairline focus:ring-2 focus:ring-hairline"
           aria-label="Create a new post"
           value={postValue}
           onChange={(e) => setPostValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submitPosts();
+            }
+          }}
         />
 
         <button
-          aria-label="New post"
-          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition-colors"
-        >
-          <CirclePlus className="w-7 h-7" strokeWidth={2} />
-        </button>
-        <button
           onClick={submitPosts}
-          aria-label="Add photo"
-          className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-neutral-700 hover:bg-neutral-100 transition-colors"
+          disabled={submittingPost || !postValue.trim()}
+          aria-label="Post"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-hover disabled:opacity-40"
         >
-          <SendHorizontal className="w-7 h-7" strokeWidth={1.8} />
+          {submittingPost ? (
+            <Loader2 className="h-6 w-6 animate-spin" />
+          ) : (
+            <SendHorizontal className="h-6 w-6" strokeWidth={1.8} />
+          )}
         </button>
       </div>
 
       {!isLoading ? (
-        <>
+        <div className="flex w-full max-w-[470px] flex-col items-center pb-6">
+          {posts.length === 0 && (
+            <p className="py-16 text-center text-sm text-ink-muted">
+              No posts yet — be the first to post!
+            </p>
+          )}
           {posts.map((data) => {
+            const state = likesState[data.$id] ?? { liked: false, count: 0 };
+            const commentCount = data.commentsCount ?? 0;
             return (
               <article
                 key={data.$id}
-                className="w-full bg-white border border-neutral-100 rounded-md mt-1"
+                id={`post-${data.$id}`}
+                className="mb-3 w-full border border-hairline bg-surface rounded-lg"
               >
                 {/* Header */}
                 <div className="flex items-center justify-between px-3 py-2.5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600">
-                      <div className="w-full h-full rounded-full bg-white p-[2px]">
+                  <button
+                    onClick={() => onViewProfile(data.user)}
+                    className="flex items-center gap-3"
+                  >
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-[2px]">
+                      <div className="h-full w-full rounded-full bg-background p-[2px]">
                         <img
-                          src={data.user.avatar}
+                          src={data.user?.avatar}
                           alt="profile"
-                          className="w-full h-full rounded-full object-cover"
+                          className="h-full w-full rounded-full object-cover"
                         />
                       </div>
                     </div>
-                    <div className="leading-tight">
-                      <p className="text-sm font-semibold text-neutral-900">
-                        {data.user.name}
+                    <div className="text-left leading-tight">
+                      <p className="text-sm font-semibold text-ink">
+                        {data.user?.username || data.user?.name}
                       </p>
-                      <p className="text-xs text-neutral-500">
-                        {data.user.email}
+                      <p className="text-xs text-ink-muted">
+                        {data.user?.name}
                       </p>
                     </div>
-                  </div>
-                  <MoreHorizontal className="w-5 h-5 text-neutral-700 cursor-pointer" />
+                  </button>
+                  <MoreHorizontal className="h-5 w-5 cursor-pointer text-ink-soft" />
                 </div>
 
                 {/* Image */}
                 {data.images && (
-                  <>
-                    <div
-                      className="relative w-full cursor-pointer overflow-hidden"
-                      onClick={handleImageTap}
-                    >
-                      <img
-                        src={data.images}
-                        alt="post"
-                        className="w-full h-full "
-                        draggable={true}
+                  <div
+                    className="relative w-full cursor-pointer overflow-hidden"
+                    onClick={() => handleImageTap(data.$id, state.liked)}
+                  >
+                    <img
+                      src={data.images}
+                      alt="post"
+                      className="w-full object-cover"
+                      loading="lazy"
+                    />
+                    {burstPost === data.$id && (
+                      <Heart
+                        className="absolute inset-0 m-auto h-24 w-24 text-white drop-shadow-lg animate-ping-once"
+                        fill="white"
+                        strokeWidth={0}
                       />
-                      {showBurst && (
-                        <Heart
-                          className="absolute inset-0 m-auto w-24 h-24 text-white drop-shadow-lg animate-ping-once"
-                          fill="white"
-                          strokeWidth={0}
-                        />
-                      )}
-                    </div>
-                  </>
+                    )}
+                  </div>
                 )}
-
-                {/* Likes */}
-
-                {/* Caption */}
-                <div className="px-3 pt-1 mt-2 mb-2 text-sm text-neutral-900">
-                  "<span className="font- mr-1.5">{data.content}</span>"
-                  {/* <span className="text-neutral-500">
-                  {" "}
-                  #santorini #greece #travel
-                </span> */}
-                </div>
 
                 {/* Actions */}
                 <div className="flex items-center justify-between px-3 pt-2.5">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4">
                     <button
-                      onClick={toggleLike}
+                      onClick={() => handleLike(data.$id)}
                       aria-label="Like"
                       className="active:scale-90 transition-transform"
                     >
                       <Heart
-                        className={`w-5 h-5 transition-colors cursor-pointer ${
-                          liked ? "text-rose-500" : "text-neutral-900"
+                        className={`w-6 h-6 transition-colors cursor-pointer ${
+                          state.liked ? "text-rose-500" : "text-ink"
                         }`}
-                        fill={liked ? "currentColor" : "none"}
-                        strokeWidth={2.3}
+                        fill={state.liked ? "currentColor" : "none"}
+                        strokeWidth={2}
                       />
                     </button>
                     <button
@@ -387,54 +356,66 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
                       className="active:scale-90 transition-transform"
                     >
                       <MessageCircle
-                        className="w-5 h-5 text-neutral-900 cursor-pointer"
-                        strokeWidth={2.3}
+                        className="h-6 w-6 cursor-pointer text-ink"
+                        strokeWidth={2}
                       />
                     </button>
-
-                    {/* {JSON.stringify(data.$id)} */}
-                  </div>
-                  {/* <button
-                  onClick={() => setSaved((s) => !s)}
-                  aria-label="Save"
-                  className="active:scale-90 transition-transform"
-                >
-                  <Bookmark
-                    className="w-6 h-6 text-neutral-900"
-                    fill={saved ? "currentColor" : "none"}
-                    strokeWidth={1.8}
-                  />
-                </button> */}
-                  <div className="px-3 pt-2 flex justify-end">
-                    <button className="flex items-center text-sm font-semibold text-neutral-900 cursor-pointer">
-                      <Heart
-                        className={`w-4 h-4 mr-1 transition-colors ${
-                          liked ? "text-rose-500" : "text-neutral-900"
-                        }`}
-                        fill={liked ? "currentColor" : "currentColor"}
-                        strokeWidth={1.8}
-                      />
-                      {likeCount.toLocaleString()} likes
+                    <button
+                      onClick={() => sharePost(data.content, data.$id)}
+                      aria-label="Share"
+                      className="active:scale-90 transition-transform"
+                    >
+                      <Send className="h-6 w-6 cursor-pointer text-ink" strokeWidth={2} />
                     </button>
                   </div>
+                  <button
+                    onClick={() =>
+                      setSaved((s) => ({ ...s, [data.$id]: !s[data.$id] }))
+                    }
+                    aria-label="Save"
+                    className="active:scale-90 transition-transform"
+                  >
+                    <Bookmark
+                      className={`h-6 w-6 transition-colors ${
+                        saved[data.$id] ? "text-ink fill-current" : "text-ink"
+                      }`}
+                      fill={saved[data.$id] ? "currentColor" : "none"}
+                      strokeWidth={2}
+                    />
+                  </button>
                 </div>
 
-                {/* Comments */}
-                <button
-                  className="px-3 pt-1.5 text-sm text-neutral-500 block cursor-pointer"
-                  onClick={() => getComments(data.$id)}
-                >
-                  {JSON.stringify(data.comments.length)}{" "}
-                  {data.comments.length > 1 ? <>comments</> : <>comment</>}
-                </button>
+                {/* Likes */}
+                <p className="px-3 pt-2 text-sm font-semibold text-ink">
+                  {state.count.toLocaleString()} likes
+                </p>
+
+                {/* Caption */}
+                <div className="px-3 pt-1 text-sm text-ink">
+                  <span className="font-semibold mr-1.5">
+                    {data.user?.username || data.user?.name}
+                  </span>
+                  <span className="break-words">{data.content}</span>
+                </div>
+
+                {/* Comments link */}
+                {commentCount > 0 && (
+                  <button
+                    className="block px-3 pt-1.5 text-sm text-ink-muted cursor-pointer hover:text-ink-soft"
+                    onClick={() => getComments(data.$id)}
+                  >
+                    View all {commentCount}{" "}
+                    {commentCount > 1 ? "comments" : "comment"}
+                  </button>
+                )}
 
                 {/* Timestamp */}
-                <p className="px-3 pt-1.5 pb-2 text-[11px] tracking-wide text-neutral-600">
+                <p className="px-3 pt-1.5 pb-2 text-[10px] uppercase tracking-wide text-ink-muted">
                   {dayjs(data.$createdAt).fromNow()}
                 </p>
 
                 {/* Add comment */}
-                <div className="flex items-center gap-2 px-3 py-2.5 border-t border-neutral-200">
+                <div className="flex items-center gap-2 border-t border-hairline px-3 py-2.5">
                   <input
                     type="text"
                     value={commentValues[data.$id] || ""}
@@ -444,88 +425,56 @@ export default function Body({ onSelectComment, profile }: BodyProps) {
                         [data.$id]: e.target.value
                       }))
                     }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        submitComment(data.$id);
+                      }
+                    }}
                     placeholder="Add a comment..."
-                    className="flex-1 text-sm outline-none text-black placeholder:text-black"
+                    className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
                   />
                   <button
-                    className="text-sm font-semibold text-black"
+                    className="text-sm font-semibold text-clay disabled:opacity-40"
                     onClick={() => submitComment(data.$id)}
+                    disabled={!commentValues[data.$id]?.trim()}
                   >
-                    <SendHorizontal />
+                    Post
                   </button>
                 </div>
               </article>
             );
           })}
-        </>
+        </div>
       ) : (
-        <>
-          <div className="w-full animate-pulse">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <article
-                key={index}
-                className="w-full bg-white border border-neutral-200 rounded-md mt-2 overflow-hidden"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-neutral-200" />
-
-                    <div className="space-y-2">
-                      <div className="h-3 w-28 rounded bg-neutral-200" />
-                      <div className="h-2 w-20 rounded bg-neutral-200" />
-                    </div>
-                  </div>
-
-                  <div className="w-5 h-5 rounded bg-neutral-200" />
+        <div className="flex w-full max-w-[470px] flex-col gap-3 pb-6">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <article
+              key={index}
+              className="w-full animate-pulse overflow-hidden border border-hairline bg-surface rounded-lg"
+            >
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="h-9 w-9 rounded-full bg-hover" />
+                <div className="space-y-2">
+                  <div className="h-3 w-28 rounded bg-hover" />
+                  <div className="h-2 w-20 rounded bg-hover" />
                 </div>
-
-                {/* Image */}
-                <div className="h-100 w-full bg-neutral-200" />
-
-                {/* Action buttons */}
-                <div className="flex justify-between items-center px-4 pt-3">
-                  <div className="flex gap-4">
-                    <div className="w-6 h-6 rounded-full bg-neutral-200" />
-                    <div className="w-6 h-6 rounded-full bg-neutral-200" />
-                    <div className="w-6 h-6 rounded-full bg-neutral-200" />
-                  </div>
-
-                  <div className="w-6 h-6 rounded-full bg-neutral-200" />
-                </div>
-
-                {/* Likes */}
-                <div className="px-4 pt-3">
-                  <div className="h-3 w-24 rounded bg-neutral-200" />
-                </div>
-
-                {/* Caption */}
-                <div className="px-4 pt-3 space-y-2">
-                  <div className="h-3 w-full rounded bg-neutral-200" />
-                  <div className="h-3 w-5/6 rounded bg-neutral-200" />
-                  <div className="h-3 w-2/3 rounded bg-neutral-200" />
-                </div>
-
-                {/* Comments */}
-                <div className="px-4 pt-3">
-                  <div className="h-3 w-28 rounded bg-neutral-200" />
-                </div>
-
-                {/* Timestamp */}
-                <div className="px-4 pt-2 pb-3">
-                  <div className="h-2 w-16 rounded bg-neutral-200" />
-                </div>
-
-                {/* Comment input */}
-                <div className="flex items-center gap-3 border-t border-neutral-200 px-4 py-3">
-                  <div className="w-8 h-8 rounded-full bg-neutral-200" />
-                  <div className="flex-1 h-9 rounded-full bg-neutral-200" />
-                  <div className="w-12 h-3 rounded bg-neutral-200" />
-                </div>
-              </article>
-            ))}
-          </div>
-        </>
+              </div>
+              <div className="h-72 w-full bg-hover" />
+              <div className="flex gap-4 px-4 pt-3">
+                <div className="h-6 w-6 rounded bg-hover" />
+                <div className="h-6 w-6 rounded bg-hover" />
+                <div className="h-6 w-6 rounded bg-hover" />
+              </div>
+              <div className="px-4 pt-3">
+                <div className="h-3 w-24 rounded bg-hover" />
+              </div>
+              <div className="px-4 py-3">
+                <div className="h-3 w-3/4 rounded bg-hover" />
+              </div>
+            </article>
+          ))}
+        </div>
       )}
 
       <style>{`

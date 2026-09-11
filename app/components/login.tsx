@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../providers";
 import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react";
 
@@ -19,6 +19,10 @@ export default function LoginPanel() {
     "signin" | "signup" | "google" | null
   >(null);
 
+  useEffect(() => {
+    if (user) window.location.href = "/components/";
+  }, [user]);
+
   if (loading) {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-[#0B0B0E]">
@@ -28,8 +32,11 @@ export default function LoginPanel() {
   }
 
   if (user) {
-    window.location.href = "/components/";
-    return null;
+    return (
+      <div className="w-full h-screen flex items-center justify-center bg-[#0B0B0E]">
+        <Loader2 className="w-7 h-7 animate-spin text-[#6C63FF]" />
+      </div>
+    );
   }
 
   const handleGoogle = async () => {

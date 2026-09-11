@@ -1,23 +1,55 @@
-// app/page.tsx
+// app/page.tsx — Main layout (profile / settings / feed / topics / comments)
 "use client";
 import { useEffect, useState } from "react";
-import Settings from "./profile";
+import Settings, { SettingsItem } from "./profile";
 import Comments from "./comments";
-import { Menu, X, Feather, ChevronLeft } from "lucide-react";
+import { Menu, X, Feather, ChevronLeft, ArrowLeft } from "lucide-react";
 import Body from "./body";
 import { useAuth } from "../providers";
 import { tablesDB } from "@/lib/appwrite";
 import { Query } from "appwrite";
 import NewsFeed from "./newspaper";
+import ProfileView from "./profileview";
+import {
+  ProfileSettingsPanel,
+  AppearancePanel,
+  NotificationsPanel,
+  PrivacyPanel,
+  LanguagePanel
+} from "./settingspanels";
 import { useRouter } from "next/navigation";
 
-type SettingsCompatProps = {
-  onNavigate: () => void;
-  authUser?: any;
-};
-
-function SettingsCompat({ onNavigate, authUser }: SettingsCompatProps) {
-  return Settings({ onNavigate, authUser } as any);
+function SettingsPanelHost({
+  item,
+  profile,
+  onProfileUpdated,
+  onBack
+}: {
+  item: SettingsItem;
+  profile: any;
+  onProfileUpdated?: (updated: any) => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center overflow-auto bg-background">
+      <div className="w-full max-w-[470px] px-4 pt-4 pb-10">
+        <button
+          onClick={onBack}
+          className="mb-3 flex items-center gap-2 text-sm font-medium text-ink-soft transition hover:text-ink"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to feed
+        </button>
+        {item === "profile" && (
+          <ProfileSettingsPanel profile={profile} onSaved={onProfileUpdated} />
+        )}
+        {item === "appearance" && <AppearancePanel />}
+        {item === "notifications" && <NotificationsPanel />}
+        {item === "privacy" && <PrivacyPanel />}
+        {item === "language" && <LanguagePanel />}
+      </div>
+    </div>
+  );
 }
 
 export default function Main() {
@@ -27,6 +59,8 @@ export default function Main() {
   const [isColumn3Open, setIsColumn3Open] = useState(false);
   const [isComment, setIsComment] = useState<boolean>(false);
   const [profile, setProfile] = useState<any>(null);
+  const [activeSetting, setActiveSetting] = useState<SettingsItem | null>(null);
+  const [viewProfile, setViewProfile] = useState<any>(null);
 
   const [selectedComment, setSelectedComment] = useState<any>(null);
 
@@ -36,15 +70,35 @@ export default function Main() {
     setIsComment(true);
   };
 
+  const openSettings = (item: SettingsItem) => {
+    setIsSidebarOpen(false);
+    setViewProfile(null);
+    setActiveSetting(item);
+  };
+
+  const viewOwnProfile = () => {
+    setIsSidebarOpen(false);
+    setActiveSetting(null);
+    setViewProfile(profile);
+  };
+
+  const viewAnyProfile = (target: any) => {
+    if (!target) return;
+    setActiveSetting(null);
+    setViewProfile(target);
+  };
+
+  const handleProfileUpdated = (updated: any) => {
+    setProfile(updated);
+  };
+
   useEffect(() => {
-    
     if (loading) return;
 
     if (!user) {
       router.replace("/");
+      return;
     }
-    
-    if (!user) return;
 
     const fetchProfile = async () => {
       try {
@@ -55,7 +109,6 @@ export default function Main() {
         });
 
         setProfile(result.rows[0] ?? null);
-        // console.log(result.rows)
       } catch (err) {
         console.error(err);
       }
@@ -63,20 +116,20 @@ export default function Main() {
 
     fetchProfile();
   }, [user, loading, router]);
+
   return (
     <div className="feather-app min-h-screen antialiased">
       {/* Fonts + design tokens, scoped to .feather-app so no inline-style TS friction */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
         .feather-app {
-     
+
           font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
           background-color: var(--paper);
           color: var(--ink);
         }
         .feather-app .font-display { font-family: 'Fraunces', ui-serif, Georgia, serif; }
         .feather-app .font-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
-        /* the stitched ink-line seam — this app's signature element, applied as a border */
         .feather-app .ink-seam-r {
           background-image: radial-gradient(var(--hairline) 1.1px, transparent 1.1px);
           background-size: 6px 14px;
@@ -96,15 +149,17 @@ export default function Main() {
         {/* LEFT SIDEBAR (Desktop) */}
         <aside className="hidden lg:flex flex-col pr-4">
           <div className="px-6 pt-6 pb-4 flex items-center gap-2">
-            <Feather className="h-5 w-5 text-black" />
-            <span className="font-display text-xl text-black tracking-tight">
+            <Feather className="h-5 w-5 text-ink" />
+            <span className="font-display text-xl text-ink tracking-tight">
               Street GP
             </span>
           </div>
           <div className="flex-1 px-2">
             <Settings
-              onNavigate={() => setIsSidebarOpen(false)}
+              onNavigate={openSettings}
               authUser={profile}
+              onViewProfile={viewOwnProfile}
+              activeItem={activeSetting}
             />
           </div>
         </aside>
@@ -122,13 +177,15 @@ export default function Main() {
             borderRight: "1px solid var(--hairline)"
           }}
         >
-          <div className="px-6 pt-6 pb-4 flex items-center gap-2 bg-white">
-            <Feather className="h-5 w-5 text-black" />
-            <span className="font-display text-xl text-black">Feather</span>
+          <div className="px-6 pt-6 pb-4 flex items-center gap-2 bg-surface">
+            <Feather className="h-5 w-5 text-ink" />
+            <span className="font-display text-xl text-ink">Street GP</span>
           </div>
           <Settings
-            onNavigate={() => setIsSidebarOpen(false)}
+            onNavigate={openSettings}
             authUser={profile}
+            onViewProfile={viewOwnProfile}
+            activeItem={activeSetting}
           />
         </aside>
 
@@ -144,7 +201,7 @@ export default function Main() {
           >
             <button
               onClick={() => setIsSidebarOpen((v) => !v)}
-              className="rounded-full p-2  text-black"
+              className="rounded-full p-2 text-ink"
               aria-label="Toggle menu"
             >
               {isSidebarOpen ? (
@@ -155,24 +212,30 @@ export default function Main() {
             </button>
 
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 overflow-hidden text-black rounded-full">
+              <button
+                onClick={viewOwnProfile}
+                className="h-8 w-8 overflow-hidden rounded-full text-ink"
+                aria-label="View your profile"
+              >
                 <img
                   src={profile?.avatar}
-                  alt="Alex Rivera"
+                  alt="Your avatar"
                   className="h-full w-full object-cover"
                 />
-              </div>
+              </button>
               <div className="leading-tight">
-                <p className="text-sm font-semibold font-display text-black">
+                <p className="font-display text-sm font-semibold text-ink">
                   {user?.name}
                 </p>
-                <p className="text-xs font-mono text-black">{user?.email}</p>
+                <p className="font-mono text-xs text-ink-soft">
+                  @{profile?.username || user?.email}
+                </p>
               </div>
             </div>
 
             <button
               onClick={() => setIsColumn3Open(true)}
-              className="rounded-full p-2 transition-colors"
+              className="rounded-full p-2 transition-colors text-ink"
               aria-label="Open comments"
             >
               <ChevronLeft className="h-5 w-5 rotate-180" />
@@ -181,10 +244,30 @@ export default function Main() {
 
           {/* Main Content */}
           <main className="flex-1 overflow-auto">
-            <Body
-              onSelectComment={(comments) => openComments(comments)}
-              profile={profile}
-            />
+            {viewProfile ? (
+              <ProfileView
+                profile={viewProfile}
+                authProfile={profile}
+                onBack={() => setViewProfile(null)}
+                onEditProfile={() => {
+                  setViewProfile(null);
+                  setActiveSetting("profile");
+                }}
+              />
+            ) : activeSetting ? (
+              <SettingsPanelHost
+                item={activeSetting}
+                profile={profile}
+                onProfileUpdated={handleProfileUpdated}
+                onBack={() => setActiveSetting(null)}
+              />
+            ) : (
+              <Body
+                onSelectComment={(comments) => openComments(comments)}
+                profile={profile}
+                onViewProfile={viewAnyProfile}
+              />
+            )}
           </main>
         </div>
 
@@ -192,20 +275,28 @@ export default function Main() {
         <div className="hidden md:flex flex-col p-5 h-screen overflow-auto">
           {isComment ? (
             <>
-              <div className="flex items-center gap-2 mb-4 text-black">
-                <div className="h-1.5 w-1.5 rounded-full" />
+              <div className="flex items-center gap-2 mb-4 text-ink">
+                <button
+                  onClick={() => setIsComment(false)}
+                  className="rounded-full p-1 transition hover:bg-hover"
+                  aria-label="Back to topics"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
                 <p className="font-display text-lg tracking-tight">Comments</p>
               </div>
               <Comments comments={selectedComment} />
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2 mb-4 text-black">
+              <div className="flex items-center gap-2 mb-4 text-ink">
                 <div
                   className="h-1.5 w-1.5 rounded-full"
                   style={{ backgroundColor: "var(--clay)" }}
                 />
-                <p className="font-display text-lg tracking-tight">Street Gp Topics</p>
+                <p className="font-display text-lg tracking-tight">
+                  Street GP Topics
+                </p>
               </div>
               <NewsFeed />
             </>
@@ -217,7 +308,7 @@ export default function Main() {
           <>
             <div
               className="fixed inset-0 z-50 backdrop-blur-sm transition-opacity duration-300 lg:hidden"
-              style={{ backgroundColor: "rgba(33,29,26,0.5)" }}
+              style={{ backgroundColor: "var(--overlay)" }}
               onClick={() => setIsColumn3Open(false)}
             />
 
@@ -246,17 +337,23 @@ export default function Main() {
                   onClick={() => setIsColumn3Open(false)}
                   className="p-1 transition-colors"
                   style={{ color: "var(--ink-soft)" }}
-                  aria-label="Close comments"
+                  aria-label="Close panel"
                 >
                   <X className="h-6 w-6" />
                 </button>
-                <p className="font-display font-semibold text-xl">Comments</p>
+                <p className="font-display font-semibold text-xl text-ink">
+                  {isComment ? "Comments" : "Street GP Topics"}
+                </p>
                 <div className="w-6" />
               </div>
 
-              <div className="overflow-auto h-[calc(88vh-80px)] bg-white rounded-t-xl px-5 pb-5">
+              <div className="overflow-auto h-[calc(88vh-80px)] bg-surface rounded-t-xl px-5 pb-5">
                 <div className="mt-5">
-                  <Comments comments={selectedComment} />
+                  {isComment ? (
+                    <Comments comments={selectedComment} />
+                  ) : (
+                    <NewsFeed />
+                  )}
                 </div>
               </div>
             </div>
@@ -267,7 +364,7 @@ export default function Main() {
         {isSidebarOpen && (
           <div
             className="fixed inset-0 z-40 backdrop-blur-sm transition-opacity duration-300 lg:hidden"
-            style={{ backgroundColor: "rgba(33,29,26,0.4)" }}
+            style={{ backgroundColor: "var(--overlay)" }}
             onClick={() => setIsSidebarOpen(false)}
           />
         )}

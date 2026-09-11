@@ -46,6 +46,11 @@ export function Providers({ children }: { children: ReactNode }) {
       });
 
       if (result.rows.length === 0) {
+        const username = (me.email ?? me.name ?? "user")
+          .split("@")[0]
+          .toLowerCase()
+          .replace(/[^a-z0-9._]/g, "")
+          .slice(0, 24);
         await tablesDB.createRow({
           databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
           tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
@@ -54,6 +59,8 @@ export function Providers({ children }: { children: ReactNode }) {
             user_id: me.$id,
             name: me.name,
             email: me.email,
+            username: username || `user${me.$id.slice(0, 6)}`,
+            bio: "",
             avatar: `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(me.name)}` // default or generated avatar URL
           }
         });

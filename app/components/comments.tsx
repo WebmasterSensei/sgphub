@@ -54,27 +54,27 @@ function CommentItem({
 
   return (
     <div className={`${depth > 0 ? "ml-4 sm:ml-6" : ""}`}>
-      <div className="group flex gap-3 rounded-xl border border-transparent p-2 transition hover:border-white/10 hover:bg-white/5">
+      <div className="group flex gap-3 rounded-xl border border-transparent p-2 transition hover:border-hairline hover:bg-hover">
         {/* avatar */}
         <img
           src={comment.user?.avatar || "/default-avatar.png"}
           alt={comment.user?.name || "User"}
-          className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-black/5"
+          className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-hairline"
         />
 
         {/* content */}
         <div className="min-w-0 flex-1">
           {/* header */}
           <div className="flex items-center gap-1.5 text-[14px] sm:text-[15px]">
-            <span className="truncate font-semibold text-neutral-900">
+            <span className="truncate font-semibold text-ink">
               {comment.user?.name || "Anonymous"}
             </span>
-            <span className="whitespace-nowrap text-neutral-400 text-[10px] sm:text-[12px]">
+            <span className="whitespace-nowrap text-ink-muted text-[10px] sm:text-[12px]">
               {comment.$updatedAt ? dayjs(comment.$updatedAt).fromNow() : ""}
             </span>
 
             <button
-              className="ml-auto -mr-1 rounded-full p-1 text-neutral-400 opacity-0 transition hover:bg-neutral-100 hover:text-neutral-700 group-hover:opacity-100"
+              className="ml-auto -mr-1 rounded-full p-1 text-ink-muted opacity-0 transition hover:bg-hover hover:text-ink-soft group-hover:opacity-100"
               aria-label="More options"
             >
               <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
@@ -82,7 +82,7 @@ function CommentItem({
           </div>
 
           {/* text */}
-          <p className="mt-0.5 text-[12px] sm:text-[13px] leading-snug text-neutral-800 break-words">
+          <p className="mt-0.5 text-[12px] sm:text-[13px] leading-snug text-ink-soft break-words">
             {comment.comments}
           </p>
 
@@ -98,7 +98,7 @@ function CommentItem({
           )}
 
           {/* actions */}
-          <div className="mt-1.5 flex justify-start gap-1 text-neutral-500">
+          <div className="mt-1.5 flex justify-start gap-1 text-ink-soft">
             <button
               onClick={() => onLike(comment.$id || comment.id)}
               className="group/btn flex items-center gap-1.5"
@@ -139,7 +139,7 @@ function CommentItem({
           {hasReplies && (
             <button
               onClick={() => setCollapsed((v) => !v)}
-              className="mt-2 flex items-center gap-1 text-[12.5px] font-medium text-neutral-400 hover:text-neutral-600"
+              className="mt-2 flex items-center gap-1 text-[12.5px] font-medium text-ink-muted hover:text-ink-soft"
             >
               <ChevronDown
                 className={`h-3.5 w-3.5 transition-transform ${
@@ -159,7 +159,7 @@ function CommentItem({
 
       {/* nested replies */}
       {hasReplies && !collapsed && (
-        <div className="mt-1 space-y-1 border-l border-neutral-200 pl-2 ml-4 sm:ml-6">
+        <div className="mt-1 space-y-1 border-l border-hairline pl-2 ml-4 sm:ml-6">
           {comment.replies.map((reply: any) => (
             <CommentItem
               key={reply.$id || reply.id}
@@ -200,18 +200,18 @@ export default function Comments({
           [&::-webkit-scrollbar]:w-1.5
           [&::-webkit-scrollbar-track]:bg-transparent
           [&::-webkit-scrollbar-thumb]:rounded-full
-          [&::-webkit-scrollbar-thumb]:bg-neutral-200
-          hover:[&::-webkit-scrollbar-thumb]:bg-neutral-400
+          [&::-webkit-scrollbar-thumb]:bg-hairline
+          hover:[&::-webkit-scrollbar-thumb]:bg-ink-muted
         "
       >
         {comments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <MessageCircle
-              className="mb-3 h-8 w-8 text-neutral-300"
+              className="mb-3 h-8 w-8 text-ink-muted"
               strokeWidth={1.5}
             />
-            <p className="text-sm text-neutral-500">No comments yet</p>
-            <p className="mt-1 text-xs text-neutral-400">
+            <p className="text-sm text-ink-soft">No comments yet</p>
+            <p className="mt-1 text-xs text-ink-muted">
               Be the first to share your thoughts
             </p>
           </div>
