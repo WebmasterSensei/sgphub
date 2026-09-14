@@ -98,19 +98,19 @@ function CommentItem({
           )}
 
           {/* actions */}
-          <div className="mt-1.5 flex justify-start gap-1 text-ink-soft">
+          <div className="mt-1.5 flex justify-end gap-1 text-ink-soft">
             <button
               onClick={() => onLike(comment.$id || comment.id)}
-              className="group/btn flex items-center gap-1.5"
+              className="group/btn flex items-center gap-1.5 cursor-pointer"
               aria-label="Like"
             >
               <Heart
-                className={`h-[18px] w-[18px] transition-transform group-active/btn:scale-90 ${
+                className={`h-[15px] w-[15px] transition-transform group-active/btn:scale-90 ${
                   comment.liked
                     ? "fill-rose-500 stroke-rose-500"
                     : "stroke-current"
                 }`}
-                strokeWidth={2.8}
+                strokeWidth={2}
               />
               <span
                 className={`text-[12.5px] sm:text-[13px] ${
@@ -118,19 +118,6 @@ function CommentItem({
                 }`}
               >
                 {formatCount(comment.react)}
-              </span>
-            </button>
-
-            <button
-              className="group/btn flex items-center gap-1.5"
-              aria-label="Reply"
-            >
-              <MessageCircle
-                className="h-[18px] w-[18px] transition-transform group-active/btn:scale-90"
-                strokeWidth={2.8}
-              />
-              <span className="text-[12.5px] sm:text-[13px]">
-                {hasReplies ? formatCount(comment.replies.length) : ""}
               </span>
             </button>
           </div>

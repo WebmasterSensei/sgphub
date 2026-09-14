@@ -1,6 +1,6 @@
 // app/page.tsx — Main layout (profile / settings / feed / topics / comments)
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Settings, { SettingsItem } from "./profile";
 import Comments from "./comments";
 import { Menu, X, Feather, ChevronLeft, ArrowLeft } from "lucide-react";
@@ -18,6 +18,7 @@ import {
   LanguagePanel
 } from "./settingspanels";
 import { useRouter } from "next/navigation";
+import PcComments from "./pccomments";
 
 function SettingsPanelHost({
   item,
@@ -32,7 +33,7 @@ function SettingsPanelHost({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center overflow-auto bg-background">
-      <div className="w-full max-w-[470px] px-4 pt-4 pb-10">
+      <div className="w-full max-w-full px-4 pt-4 pb-10">
         <button
           onClick={onBack}
           className="mb-3 flex items-center gap-2 text-sm font-medium text-ink-soft transition hover:text-ink"
@@ -63,9 +64,11 @@ export default function Main() {
   const [viewProfile, setViewProfile] = useState<any>(null);
 
   const [selectedComment, setSelectedComment] = useState<any>(null);
+  const [passedData, setPassedData] = useState<any>(null);
 
-  const openComments = (comments: any) => {
+  const openComments = (comments: any, passData: any) => {
     setSelectedComment(comments);
+    setPassedData(passData);
     setIsColumn3Open(true);
     setIsComment(true);
   };
@@ -91,6 +94,8 @@ export default function Main() {
   const handleProfileUpdated = (updated: any) => {
     setProfile(updated);
   };
+
+  const reloadCommentBody = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -195,7 +200,7 @@ export default function Main() {
           <header
             className="sticky top-0 z-40 flex items-center justify-between p-3 backdrop-blur-md lg:hidden"
             style={{
-              backgroundColor: "rgba(242,239,230,0.85)",
+              backgroundColor: "",
               borderBottom: "1px solid var(--hairline)"
             }}
           >
@@ -263,7 +268,13 @@ export default function Main() {
               />
             ) : (
               <Body
-                onSelectComment={(comments) => openComments(comments)}
+                onSelectComment={(comments, passData) =>
+                  openComments(comments, passData)
+                }
+                // Pass a *setter* instead of an invoker
+                registerReloadComment={(fn) => {
+                  reloadCommentBody.current = fn;
+                }}
                 profile={profile}
                 onViewProfile={viewAnyProfile}
               />
@@ -274,19 +285,40 @@ export default function Main() {
         {/* COLUMN 3 - Desktop */}
         <div className="hidden md:flex flex-col p-5 h-screen overflow-auto">
           {isComment ? (
-            <>
-              <div className="flex items-center gap-2 mb-4 text-ink">
-                <button
-                  onClick={() => setIsComment(false)}
-                  className="rounded-full p-1 transition hover:bg-hover"
-                  aria-label="Back to topics"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-                <p className="font-display text-lg tracking-tight">Comments</p>
-              </div>
-              <Comments comments={selectedComment} />
-            </>
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-lg p-4"
+              onClick={() => setIsComment(false)}
+            >
+              {" "}
+              <div
+                className="w-full max-w-5xl max-h-[95vh] b overflow-hidden rounded-2xl bg-background shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {" "}
+                <div className="flex gap-2 border-b border-gray-800  px-4 py-3 text-ink">
+                  {" "}
+                  <button
+                    onClick={() => setIsComment(false)}
+                    className="rounded-full p-1 transition hover:bg-hover"
+                    aria-label="Back to topics"
+                  >
+                    {" "}
+                    <ArrowLeft className="h-4 w-4" />{" "}
+                  </button>{" "}
+                  <p className="font-display text-lg tracking-tight">
+                    {" "}
+                    Comments{" "}
+                  </p>{" "}
+                </div>{" "}
+                <div className="h-[calc(85vh-60px)] overflow-hidden">
+                  <PcComments
+                    reloadGetComments={() => reloadCommentBody.current?.()}
+                    comments={selectedComment}
+                    passedData={passedData}
+                  />
+                </div>
+              </div>{" "}
+            </div>
           ) : (
             <>
               <div className="flex items-center gap-2 mb-4 text-ink">
@@ -298,7 +330,7 @@ export default function Main() {
                   Street GP Topics
                 </p>
               </div>
-              <NewsFeed />
+              {/* <NewsFeed /> */}
             </>
           )}
         </div>

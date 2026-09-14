@@ -25,7 +25,7 @@ type PanelShellProps = {
 
 function PanelShell({ icon: Icon, title, subtitle, children }: PanelShellProps) {
   return (
-    <div className="w-full max-w-[470px]">
+    <div className="w-full max-w-full">
       <div className="mb-5 flex items-center gap-3 border-b border-hairline pb-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-hover">
           <Icon className="h-5 w-5 text-ink" />

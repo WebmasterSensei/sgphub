@@ -9,7 +9,9 @@ import {
   Bookmark,
   MoreHorizontal,
   SendHorizontal,
-  Loader2
+  Loader2,
+  Clipboard,
+  Paperclip
 } from "lucide-react";
 import { useAuth } from "../providers";
 import {
@@ -21,13 +23,16 @@ import {
 
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { json } from "stream/consumers";
+import { pid } from "process";
 
 dayjs.extend(relativeTime);
 
 type BodyProps = {
-  onSelectComment: (comments: any[]) => void;
+  onSelectComment: (comments: any[], passData: any) => void;
   profile: any;
   onViewProfile: (profile: any) => void;
+  registerReloadComment: (fn: (() => void) | null) => void; // ← new prop
 };
 
 type LikesState = Record<string, { liked: boolean; count: number }>;
@@ -35,7 +40,8 @@ type LikesState = Record<string, { liked: boolean; count: number }>;
 export default function Body({
   onSelectComment,
   profile,
-  onViewProfile
+  onViewProfile,
+  registerReloadComment
 }: BodyProps) {
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -49,6 +55,7 @@ export default function Body({
   const [submittingPost, setSubmittingPost] = useState(false);
   const { user } = useAuth();
   const lastTap = useRef<Record<string, number>>({});
+  const [passData, setPassData] = useState<any>();
 
   const handleImageTap = (postId: string, liked: boolean) => {
     const now = Date.now();
@@ -64,20 +71,33 @@ export default function Body({
     async (postId: string) => {
       if (!user) return;
       const current = likesState[postId] ?? { liked: false, count: 0 };
-      const optimistically = { liked: !current.liked, count: current.count + (current.liked ? -1 : 1) };
+      const optimistically = {
+        liked: !current.liked,
+        count: current.count + (current.liked ? -1 : 1)
+      };
       setLikesState((prev) => ({ ...prev, [postId]: optimistically }));
       const nowLiked = await togglePostLike(postId, user.$id);
       if (nowLiked !== optimistically.liked) {
         setLikesState((prev) => ({
           ...prev,
-          [postId]: { liked: nowLiked, count: current.count + (nowLiked ? 1 : 0) }
+          [postId]: {
+            liked: nowLiked,
+            count: current.count + (nowLiked ? 1 : 0)
+          }
         }));
       }
     },
     [user, likesState]
   );
 
-  const getComments = async (postId: string) => {
+  const [pId, setPID] = useState<any>();
+
+  const pIdRef = useRef(pId);
+  const passDataRef = useRef(passData);
+  pIdRef.current = pId;
+  passDataRef.current = passData;
+
+  const getComments = async (postId: string, data: any) => {
     try {
       const result = await tablesDB.listRows({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -93,7 +113,10 @@ export default function Body({
         user: profiles[comment.user_id] ?? null
       }));
 
-      onSelectComment(commentsWithUsers);
+      onSelectComment(commentsWithUsers, data);
+      setPassData(data);
+      setPID(postId);
+      fetchRows();
     } catch (error) {
       console.error(error);
     }
@@ -160,7 +183,7 @@ export default function Body({
         ...prev,
         [postId]: ""
       }));
-      getComments(postId);
+      // getComments(postId, passData);
       fetchRows(); // Reload the posts
     } catch (error) {
       console.error(error);
@@ -168,7 +191,10 @@ export default function Body({
   };
 
   const fetchRows = async () => {
+    if (!user?.$id) return;
+
     setIsLoading(true);
+
     try {
       const postsResult = await tablesDB.listRows({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -183,14 +209,23 @@ export default function Body({
       );
 
       const likesMap: Record<string, { liked: boolean; count: number }> = {};
+
       const stats = await Promise.all(
         postRows.map(async (post: any) => {
           const [stat, liked] = await Promise.all([
             getPostStats(post.$id),
-            user ? hasLiked(post.$id, user.$id) : Promise.resolve(false)
+            hasLiked(post.$id, user.$id)
           ]);
-          likesMap[post.$id] = { liked, count: stat.likes };
-          return { ...post, commentsCount: stat.comments };
+
+          likesMap[post.$id] = {
+            liked,
+            count: stat.likes
+          };
+
+          return {
+            ...post,
+            commentsCount: stat.comments
+          };
         })
       );
 
@@ -201,6 +236,7 @@ export default function Body({
           user: authorProfileMap[post.user_id] ?? null
         }))
       );
+
       setLikesState(likesMap);
     } catch (err) {
       console.error(err);
@@ -210,9 +246,24 @@ export default function Body({
   };
 
   useEffect(() => {
-    fetchRows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const reload = () => {
+      if (pIdRef.current && passDataRef.current) {
+        getComments(pIdRef.current, passDataRef.current);
+      }
+    };
+
+    registerReloadComment(reload);
+
+    return () => {
+      registerReloadComment(null); // clean up when Body unmounts
+    };
+  }, [registerReloadComment]);
+  
+  useEffect(() => {
+    if (user?.$id) {
+      fetchRows();
+    }
+  }, [user?.$id]);
 
   const sharePost = async (content: string, postId: string) => {
     try {
@@ -220,7 +271,9 @@ export default function Body({
         `${window.location.origin}/components/#post-${postId}`
       );
     } catch {}
-    alert(`Post copied to clipboard — "${content.slice(0, 40)}${content.length > 40 ? "…" : ""}"`);
+    alert(
+      `Post copied to clipboard — "${content.slice(0, 40)}${content.length > 40 ? "…" : ""}"`
+    );
   };
 
   return (
@@ -310,7 +363,12 @@ export default function Body({
                     </div>
                   </button>
 
-                  <MoreHorizontal className="h-5 w-5 cursor-pointer text-ink-soft" />
+                  {/* Timestamp */}
+                  <p className="px-3 pt-1.5 pb-2 text-[10px] tracking-wide text-ink">
+                    {dayjs(data.$createdAt).fromNow()}
+                  </p>
+
+                  {/* <MoreHorizontal className="h-5 w-5 cursor-pointer text-ink-soft" /> */}
                 </div>
 
                 {/* Image */}
@@ -335,16 +393,34 @@ export default function Body({
                   </div>
                 )}
 
+                {/* Caption */}
+                <div className="px-3 pt-2 pb-2 text-sm text-ink">
+                  {/* <span className="font-semibold mr-1.5">
+                    {data.user?.username || data.user?.name}
+                  </span> */}
+                  <span className="break-words">{data.content}</span>
+                </div>
+
+                {commentCount > 0 && (
+                  <button
+                    className="block px-3 pt-1.5 pb-2 text-sm text-ink-muted cursor-pointer hover:text-ink-soft"
+                    onClick={() => getComments(data.$id, data)}
+                  >
+                    View all {commentCount}{" "}
+                    {commentCount > 1 ? "comments" : "comment"}
+                  </button>
+                )}
+
                 {/* Actions */}
-                <div className="flex items-center justify-between px-3 pt-2.5">
-                  <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between px-3 pt-1 pb-2.5">
+                  <div className="flex items-center gap-3">
                     <button
                       onClick={() => handleLike(data.$id)}
                       aria-label="Like"
                       className="active:scale-90 transition-transform"
                     >
                       <Heart
-                        className={`w-6 h-6 transition-colors cursor-pointer ${
+                        className={`w-5 h-5 transition-colors cursor-pointer ${
                           state.liked ? "text-rose-500" : "text-ink"
                         }`}
                         fill={state.liked ? "currentColor" : "none"}
@@ -352,68 +428,44 @@ export default function Body({
                       />
                     </button>
                     <button
-                      onClick={() => getComments(data.$id)}
+                      onClick={() => getComments(data.$id, data)}
                       aria-label="Comment"
-                      className="active:scale-90 transition-transform"
+                      className="relative active:scale-90 transition-transform"
                     >
                       <MessageCircle
-                        className="h-6 w-6 cursor-pointer text-ink"
+                        className="h-5 w-5 cursor-pointer text-ink"
                         strokeWidth={2}
                       />
+
+                      {commentCount > 0 && (
+                        <span className="absolute -top-2 -right-2 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                          {commentCount > 99 ? "99+" : commentCount}
+                        </span>
+                      )}
                     </button>
+
                     <button
                       onClick={() => sharePost(data.content, data.$id)}
                       aria-label="Share"
                       className="active:scale-90 transition-transform"
                     >
-                      <Send className="h-6 w-6 cursor-pointer text-ink" strokeWidth={2} />
+                      <Paperclip
+                        className="h-5 w-5 cursor-pointer text-ink"
+                        strokeWidth={2}
+                      />
                     </button>
                   </div>
-                  <button
-                    onClick={() =>
-                      setSaved((s) => ({ ...s, [data.$id]: !s[data.$id] }))
-                    }
-                    aria-label="Save"
-                    className="active:scale-90 transition-transform"
-                  >
-                    <Bookmark
-                      className={`h-6 w-6 transition-colors ${
-                        saved[data.$id] ? "text-ink fill-current" : "text-ink"
-                      }`}
-                      fill={saved[data.$id] ? "currentColor" : "none"}
-                      strokeWidth={2}
-                    />
-                  </button>
+                  {/* Likes */}
+                  <div className="flex jusfify-between gap-1 text-sm">
+                    {/* {state?.count} */}
+                    {state?.count > 0 && (
+                      <p>
+                        {" "}
+                        {state?.count} {state?.count > 1 ? "likes" : "like"}
+                      </p>
+                    )}
+                  </div>
                 </div>
-
-                {/* Likes */}
-                <p className="px-3 pt-2 text-sm font-semibold text-ink">
-                  {state.count.toLocaleString()} likes
-                </p>
-
-                {/* Caption */}
-                <div className="px-3 pt-1 text-sm text-ink">
-                  <span className="font-semibold mr-1.5">
-                    {data.user?.username || data.user?.name}
-                  </span>
-                  <span className="break-words">{data.content}</span>
-                </div>
-
-                {/* Comments link */}
-                {commentCount > 0 && (
-                  <button
-                    className="block px-3 pt-1.5 text-sm text-ink-muted cursor-pointer hover:text-ink-soft"
-                    onClick={() => getComments(data.$id)}
-                  >
-                    View all {commentCount}{" "}
-                    {commentCount > 1 ? "comments" : "comment"}
-                  </button>
-                )}
-
-                {/* Timestamp */}
-                <p className="px-3 pt-1.5 pb-2 text-[10px] uppercase tracking-wide text-ink-muted">
-                  {dayjs(data.$createdAt).fromNow()}
-                </p>
 
                 {/* Add comment */}
                 <div className="flex items-center gap-2 border-t border-hairline px-3 py-2.5">
@@ -436,11 +488,19 @@ export default function Body({
                     className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
                   />
                   <button
-                    className="text-sm font-semibold text-clay disabled:opacity-40"
+                    className="text-sm font-bold cursor-pointer"
                     onClick={() => submitComment(data.$id)}
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === "Enter" &&
+                        commentValues[data.$id]?.trim()
+                      ) {
+                        submitComment(data.$id);
+                      }
+                    }}
                     disabled={!commentValues[data.$id]?.trim()}
                   >
-                    Post
+                    Comment
                   </button>
                 </div>
               </article>
@@ -448,7 +508,7 @@ export default function Body({
           })}
         </div>
       ) : (
-        <div className="flex w-full max-w-[470px] flex-col gap-3 pb-6">
+        <div className="flex w-full max-w-full flex-col gap-3 pb-6">
           {Array.from({ length: 3 }).map((_, index) => (
             <article
               key={index}

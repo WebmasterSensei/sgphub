@@ -5,8 +5,10 @@ const DB = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!;
 const PROFILE_TABLE = process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!;
 const POSTS_TABLE = process.env.NEXT_PUBLIC_APPWRITE_TABLE_ID!;
 const COMMENTS_TABLE = process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!;
-const FOLLOWS_TABLE = process.env.NEXT_PUBLIC_APPWRITE_FOLLOWS_TABLE_ID;
-const LIKES_TABLE = process.env.NEXT_PUBLIC_APPWRITE_LIKES_TABLE_ID;
+const FOLLOWS_TABLE = process.env.NEXT_PUBLIC_APPWRITE_FOLLOWS_TABLE_ID!;
+const LIKES_TABLE = process.env.NEXT_PUBLIC_APPWRITE_LIKES_TABLE_ID!;
+import { account } from "@/lib/appwrite";
+
 
 export async function fetchProfile(userId: string) {
   try {
@@ -64,6 +66,7 @@ export async function getPostStats(postId: string) {
   });
 
   let likesPromise: Promise<any> = Promise.resolve({ rows: [], total: 0 });
+
   if (LIKES_TABLE) {
     likesPromise = tablesDB
       .listRows({
@@ -81,6 +84,7 @@ export async function getPostStats(postId: string) {
 export async function hasLiked(postId: string, userId: string) {
   if (!LIKES_TABLE) return false;
   try {
+
     const result = await tablesDB.listRows({
       databaseId: DB,
       tableId: LIKES_TABLE,
