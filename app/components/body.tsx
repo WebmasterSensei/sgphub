@@ -226,7 +226,7 @@ export default function Body({
   return (
     <main className="flex flex-1 flex-col items-center overflow-auto bg-background">
       {/* Sticky "create post" bar */}
-      <div className="sticky top-0 z-30 flex w-full max-w-[470px] items-center gap-3 border-b border-hairline bg-surface/90 px-3.5 py-2.5 backdrop-blur-md">
+      <div className="sticky top-0 z-30 flex w-full max-w-full items-center gap-3 border-b border-hairline bg-surface/90 px-3.5 py-2.5 backdrop-blur-md">
         <div className="w-9 h-9 shrink-0 overflow-hidden rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-[2px]">
           <button
             onClick={() => onViewProfile(profile)}
@@ -270,7 +270,7 @@ export default function Body({
       </div>
 
       {!isLoading ? (
-        <div className="flex w-full max-w-[470px] flex-col items-center pb-6">
+        <div className="flex w-full max-w-full flex-col items-center pb-6">
           {posts.length === 0 && (
             <p className="py-16 text-center text-sm text-ink-muted">
               No posts yet — be the first to post!
@@ -309,6 +309,7 @@ export default function Body({
                       </p>
                     </div>
                   </button>
+
                   <MoreHorizontal className="h-5 w-5 cursor-pointer text-ink-soft" />
                 </div>
 
