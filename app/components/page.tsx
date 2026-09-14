@@ -151,7 +151,7 @@ export default function Main() {
       `}</style>
 
       {/* Exactly 3 grid children on md+, matching the 3 template columns — never add a 4th */}
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_1.4fr] h-screen">
+      <div className="grid grid-cols-1 md:grid-cols-[20%_50%_40%] h-screen">
         {/* LEFT SIDEBAR (Desktop) */}
         <aside className="hidden lg:flex flex-col pr-4">
           <div className="px-6 pt-6 pb-4 flex items-center gap-2">
