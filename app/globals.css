@@ -1,29 +1,28 @@
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap");
+
 @import "tailwindcss";
 
 :root {
   color-scheme: light;
 
   --background: #ffffff;
-  --foreground: #0f0f0f;
+  --foreground: #14203b;
 
   --paper: #ffffff;
-
   --surface: #ffffff;
-  --surface-raised: #fafafa;
+  --surface-raised: #f8fafc;
 
-  --hairline: #efefef;
+  --hairline: #e2e8f0;
 
-  --ink: #0f0f0f;
-  --ink-soft: #737373;
-  --ink-muted: #a8a8a8;
+  --ink: #0f172a;
+  --ink-soft: #64748b;
+  --ink-muted: #94a3b8;
 
   --clay: #6c63ff;
-
   --accent: #6c63ff;
   --accent-hover: #5a52e0;
 
-  --hover: #f5f5f5;
+  --hover: #f1f5f9;
   --overlay: rgba(0, 0, 0, 0.5);
 }
 
@@ -31,48 +30,51 @@
   :root {
     color-scheme: dark;
 
-    --background: #0a0a0a;
-    --foreground: #f5f5f5;
+    --background: #01050f;
+    --foreground: #f1f5f9;
 
-    --paper: #0a0a0a;
+    --paper: #030915;
+    --surface: #030b1c;
+    --surface-raised: #061329;
 
-    --surface: #0a0a0a;
-    --surface-raised: #161616;
+    --hairline: #0d1d38;
 
-    --hairline: #262626;
-
-    --ink: #f5f5f5;
-    --ink-soft: #a8a8a8;
-    --ink-muted: #737373;
+    --ink: #f1f5f9;
+    --ink-soft: #8da2c0;
+    --ink-muted: #526987;
 
     --clay: #8b84ff;
-
     --accent: #7b74ff;
-    --accent-hover: #8f88ff;
+    --accent-hover: #9690ff;
 
-    --hover: #161616;
-    --overlay: rgba(0, 0, 0, 0.7);
+    --hover: #07172f;
+
+    --overlay: rgba(0, 4, 18, 0.8);
   }
 }
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
   --color-paper: var(--paper);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
+
   --color-hairline: var(--hairline);
+
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
   --color-ink-muted: var(--ink-muted);
+
   --color-clay: var(--clay);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+
   --color-hover: var(--hover);
+
   --font-sans: "Poppins", sans-serif;
 }
 
-/* Custom scrollbar that follows the theme */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--hairline) transparent;

@@ -19,6 +19,7 @@ import {
 } from "./settingspanels";
 import { useRouter } from "next/navigation";
 import PcComments from "./pccomments";
+import Announcements from "./announcement";
 
 function SettingsPanelHost({
   item,
@@ -156,7 +157,7 @@ export default function Main() {
           <div className="px-6 pt-6 pb-4 flex items-center gap-2">
             <Feather className="h-5 w-5 text-ink" />
             <span className="font-display text-xl text-ink tracking-tight">
-              Street GP
+              MisFits Community
             </span>
           </div>
           <div className="flex-1 px-2">
@@ -184,7 +185,9 @@ export default function Main() {
         >
           <div className="px-6 pt-6 pb-4 flex items-center gap-2 bg-surface">
             <Feather className="h-5 w-5 text-ink" />
-            <span className="font-display text-xl text-ink">Street GP</span>
+            <span className="font-display text-xl text-ink">
+              MisFits Community
+            </span>
           </div>
           <Settings
             onNavigate={openSettings}
@@ -327,9 +330,10 @@ export default function Main() {
                   style={{ backgroundColor: "var(--clay)" }}
                 />
                 <p className="font-display text-lg tracking-tight">
-                  Street GP Topics
+                  Announcements
                 </p>
               </div>
+              <Announcements />
               {/* <NewsFeed /> */}
             </>
           )}
@@ -374,7 +378,7 @@ export default function Main() {
                   <X className="h-6 w-6" />
                 </button>
                 <p className="font-display font-semibold text-xl text-ink">
-                  {isComment ? "Comments" : "Street GP Topics"}
+                  {isComment ? "Comments" : "Announcements"}
                 </p>
                 <div className="w-6" />
               </div>
@@ -384,7 +388,7 @@ export default function Main() {
                   {isComment ? (
                     <Comments comments={selectedComment} />
                   ) : (
-                    <NewsFeed />
+                    <Announcements />
                   )}
                 </div>
               </div>

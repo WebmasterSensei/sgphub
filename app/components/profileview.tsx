@@ -106,7 +106,7 @@ export default function ProfileView({
 
   return (
     <div className="flex flex-1 flex-col items-center overflow-auto bg-background">
-      <div className="w-full max-w-[560px]">
+      <div className="w-full pr-4">
         {/* Top bar */}
         <div className="flex items-center gap-3 border-b border-hairline px-4 py-3">
           <button
