@@ -99,7 +99,12 @@ export default function Announcements() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch("https://misfits.lovestoblog.com/upcoming_api");
+        const res = await fetch(
+          "https://misfits.lovestoblog.com/upcoming_api",
+          {
+            method: "GET"
+          }
+        );
 
         if (!res.ok) {
           throw new Error(`Request failed with status ${res.status}`);
@@ -107,7 +112,7 @@ export default function Announcements() {
 
         const json: ApiResponse = await res.json();
 
-        console.log(json)
+        console.log(json);
 
         if (!cancelled) {
           setAnnouncements(json.data ?? []);
