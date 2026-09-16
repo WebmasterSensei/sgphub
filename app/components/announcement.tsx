@@ -90,8 +90,10 @@ export default function Announcements() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
+    console.log(API_URL);
     let cancelled = false;
 
     async function fetchAnnouncements() {
@@ -99,8 +101,7 @@ export default function Announcements() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(
-          "https://misfits.lovestoblog.com/upcoming_api",
+        const res = await fetch(`${API_URL}/upcoming_api`,
           {
             method: "GET"
           }
