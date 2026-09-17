@@ -11,7 +11,9 @@ import {
   SendHorizontal,
   Loader2,
   Clipboard,
-  Paperclip
+  Paperclip,
+  ImagePlus,
+  X
 } from "lucide-react";
 import { useAuth } from "../providers";
 import {
@@ -20,6 +22,7 @@ import {
   hasLiked,
   togglePostLike
 } from "@/lib/api";
+import { uploadImage, validateImage } from "@/lib/storage";
 
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -53,6 +56,10 @@ export default function Body({
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [burstPost, setBurstPost] = useState<string | null>(null);
   const [submittingPost, setSubmittingPost] = useState(false);
+  const [postImage, setPostImage] = useState<File | null>(null);
+  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const [postImageError, setPostImageError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const lastTap = useRef<Record<string, number>>({});
   const [passData, setPassData] = useState<any>();
@@ -128,30 +135,56 @@ export default function Body({
       return;
     }
 
-    if (!postValue.trim()) {
+    if (!postValue.trim() && !postImage) {
       alert("Post cannot be empty.");
       return;
     }
 
     try {
       setSubmittingPost(true);
+      let images = "";
+      if (postImage) {
+        const bucketId = process.env.NEXT_PUBLIC_APPWRITE_POSTS_BUCKET_ID;
+        if (!bucketId) throw new Error("Post image bucket is not configured.");
+        images = await uploadImage(postImage, bucketId);
+      }
       await tablesDB.createRow({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
         tableId: process.env.NEXT_PUBLIC_APPWRITE_TABLE_ID!,
         rowId: ID.unique(),
         data: {
           content: postValue.trim(),
-          user_id: user.$id
+          user_id: user.$id,
+          ...(images ? { images } : {})
         }
       });
 
       setPostValue("");
+      setPostImage(null);
+      setPostImagePreview(null);
+      setPostImageError(null);
       fetchRows(); // Reload the posts
     } catch (error) {
       console.error(error);
     } finally {
       setSubmittingPost(false);
     }
+  };
+
+  const pickPostImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      validateImage(file);
+    } catch (err) {
+      setPostImageError(
+        err instanceof Error ? err.message : "Could not read that image."
+      );
+      return;
+    }
+    setPostImageError(null);
+    setPostImage(file);
+    setPostImagePreview(URL.createObjectURL(file));
   };
 
   const submitComment = async (postId: string) => {
@@ -279,47 +312,92 @@ export default function Body({
   return (
     <main className="flex flex-1 flex-col items-center overflow-auto bg-background">
       {/* Sticky "create post" bar */}
-      <div className="sticky top-0 z-30 flex w-full max-w-full items-center gap-3 border-b border-hairline bg-surface/90 px-3.5 py-2.5 backdrop-blur-md">
-        <div className="w-9 h-9 shrink-0 overflow-hidden rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-[2px]">
+      <div className="sticky top-0 z-30 flex w-full max-w-full flex-col border-b border-hairline bg-surface/90 px-3.5 py-2.5 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 shrink-0 overflow-hidden rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-[2px]">
+            <button
+              onClick={() => onViewProfile(profile)}
+              className="block h-full w-full overflow-hidden rounded-full bg-background p-[2px]"
+            >
+              <img
+                src={profile?.avatar}
+                alt="your profile"
+                className="h-full w-full rounded-full object-cover"
+              />
+            </button>
+          </div>
+
+          <textarea
+            placeholder="What's on your mind?"
+            rows={1}
+            className="flex-1 w-full resize-none rounded-2xl bg-surface-raised px-5 py-3 text-sm text-ink shadow-sm outline-none transition-all duration-200 border border-transparent placeholder:text-ink-muted hover:bg-hover focus:bg-surface focus:border-hairline focus:ring-2 focus:ring-hairline"
+            aria-label="Create a new post"
+            value={postValue}
+            onChange={(e) => setPostValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitPosts();
+              }
+            }}
+          />
+
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={pickPostImage}
+          />
+
           <button
-            onClick={() => onViewProfile(profile)}
-            className="block h-full w-full overflow-hidden rounded-full bg-background p-[2px]"
+            onClick={() => imageInputRef.current?.click()}
+            aria-label="Attach an image"
+            disabled={submittingPost}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-hover disabled:opacity-40"
           >
-            <img
-              src={profile?.avatar}
-              alt="your profile"
-              className="h-full w-full rounded-full object-cover"
-            />
+            <ImagePlus className="h-6 w-6" strokeWidth={1.8} />
+          </button>
+
+          <button
+            onClick={submitPosts}
+            disabled={submittingPost || (!postValue.trim() && !postImage)}
+            aria-label="Post"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-hover disabled:opacity-40"
+          >
+            {submittingPost ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : (
+              <SendHorizontal className="h-6 w-6" strokeWidth={1.8} />
+            )}
           </button>
         </div>
 
-        <textarea
-          placeholder="What's on your mind?"
-          rows={1}
-          className="flex-1 w-full resize-none rounded-2xl bg-surface-raised px-5 py-3 text-sm text-ink shadow-sm outline-none transition-all duration-200 border border-transparent placeholder:text-ink-muted hover:bg-hover focus:bg-surface focus:border-hairline focus:ring-2 focus:ring-hairline"
-          aria-label="Create a new post"
-          value={postValue}
-          onChange={(e) => setPostValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submitPosts();
-            }
-          }}
-        />
-
-        <button
-          onClick={submitPosts}
-          disabled={submittingPost || !postValue.trim()}
-          aria-label="Post"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-hover disabled:opacity-40"
-        >
-          {submittingPost ? (
-            <Loader2 className="h-6 w-6 animate-spin" />
-          ) : (
-            <SendHorizontal className="h-6 w-6" strokeWidth={1.8} />
-          )}
-        </button>
+        {postImagePreview && (
+          <div className="mt-2 flex items-center gap-3">
+            <div className="relative h-20 w-20 overflow-hidden rounded-xl border border-hairline">
+              <img
+                src={postImagePreview}
+                alt="post preview"
+                className="h-full w-full object-cover"
+              />
+              <button
+                onClick={() => {
+                  setPostImage(null);
+                  setPostImagePreview(null);
+                  setPostImageError(null);
+                }}
+                aria-label="Remove image"
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {postImageError && (
+              <p className="text-xs text-red-500">{postImageError}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {!isLoading ? (

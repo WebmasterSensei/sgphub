@@ -1,6 +1,6 @@
 // components/settingspanels.tsx — functional settings panels
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   User,
   Bell,
@@ -12,9 +12,11 @@ import {
   Check,
   Loader2,
   Monitor,
-  Save
+  Save,
+  Camera
 } from "lucide-react";
 import { tablesDB } from "@/lib/appwrite";
+import { uploadImage, validateImage } from "@/lib/storage";
 
 type PanelShellProps = {
   icon: any;
@@ -91,33 +93,59 @@ export function ProfileSettingsPanel({
   const [bio, setBio] = useState(profile?.bio ?? "");
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSave = name.trim().length > 0 && /^[a-z0-9._]{3,24}$/.test(username);
+
+  const pickAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      validateImage(file);
+    } catch (err) {
+      setAvatarError(
+        err instanceof Error ? err.message : "Could not read that image."
+      );
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      return;
+    }
+    setAvatarError(null);
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
 
   const save = async () => {
     if (!profile || !canSave) return;
     setSaving(true);
     try {
+      let avatar = profile.avatar;
+      if (avatarFile) {
+        const bucketId = process.env.NEXT_PUBLIC_APPWRITE_AVATAR_BUCKET_ID;
+        if (!bucketId) throw new Error("Avatar bucket is not configured.");
+        avatar = await uploadImage(avatarFile, bucketId);
+      }
+      const updated = {
+        name: name.trim(),
+        username: username.trim().toLowerCase(),
+        bio: bio.trim(),
+        avatar
+      };
       await tablesDB.updateRow({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
         tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
         rowId: profile.$id,
-        data: {
-          name: name.trim(),
-          username: username.trim().toLowerCase(),
-          bio: bio.trim()
-        }
+        data: updated
       });
-      onSaved?.({
-        ...profile,
-        name: name.trim(),
-        username: username.trim().toLowerCase(),
-        bio: bio.trim()
-      });
+      onSaved?.({ ...profile, ...updated });
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2000);
     } catch (error) {
       console.error(error);
+      setAvatarError(error instanceof Error ? error.message : "Save failed.");
     } finally {
       setSaving(false);
     }
@@ -131,16 +159,43 @@ export function ProfileSettingsPanel({
     >
       <div className="space-y-4">
         <div className="flex items-center gap-4 rounded-2xl border border-hairline bg-surface-raised p-4">
-          <img
-            src={profile?.avatar}
-            alt="avatar"
-            className="h-16 w-16 rounded-full object-cover ring-2 ring-hairline"
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            disabled={saving}
+            className="group relative h-16 w-16 shrink-0 rounded-full outline-none"
+            aria-label="Change profile photo"
+          >
+            <img
+              src={avatarPreview ?? profile?.avatar}
+              alt="avatar"
+              className="h-16 w-16 rounded-full object-cover ring-2 ring-hairline transition group-hover:ring-accent/60"
+            />
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition group-hover:opacity-100">
+              <Camera className="h-5 w-5 text-white" />
+            </span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={pickAvatar}
           />
-          <div>
+          <div className="min-w-0">
             <p className="font-medium text-ink">Profile photo</p>
             <p className="text-sm text-ink-muted">
-              Generated from your display name
+              {avatarFile ? "New photo ready – save to apply" : "Click to upload a new one"}
             </p>
+            {avatarError && (
+              <p className="mt-1 text-xs text-red-500">{avatarError}</p>
+            )}
           </div>
         </div>
         <Field

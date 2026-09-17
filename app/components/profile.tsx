@@ -75,7 +75,7 @@ export default function Settings({
             </p>
             {authUser?.bio && (
               <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">
-                {authUser.bio}
+                {/* {authUser.bio} */}
               </p>
             )}
           </div>
