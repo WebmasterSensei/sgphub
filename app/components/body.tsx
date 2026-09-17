@@ -144,7 +144,7 @@ export default function Body({
       setSubmittingPost(true);
       let images = "";
       if (postImage) {
-        const bucketId = process.env.NEXT_PUBLIC_APPWRITE_POSTS_BUCKET_ID;
+        const bucketId = process.env.NEXT_PUBLIC_APPWRITE_AVATAR_BUCKET_ID;
         if (!bucketId) throw new Error("Post image bucket is not configured.");
         images = await uploadImage(postImage, bucketId);
       }
