@@ -291,7 +291,7 @@ export default function Body({
       registerReloadComment(null); // clean up when Body unmounts
     };
   }, [registerReloadComment]);
-  
+
   useEffect(() => {
     if (user?.$id) {
       fetchRows();
@@ -448,29 +448,42 @@ export default function Body({
 
                   {/* <MoreHorizontal className="h-5 w-5 cursor-pointer text-ink-soft" /> */}
                 </div>
-
                 {/* Image */}
                 {data.images && (
                   <div
-                    className="relative w-full cursor-pointer overflow-hidden"
+                    className="relative w-full cursor-pointer overflow-hidden bg-black"
                     onClick={() => handleImageTap(data.$id, state.liked)}
                   >
+                    {/* Blurred background */}
                     <img
                       src={data.images}
-                      alt="post"
-                      className="w-full object-cover"
-                      loading="lazy"
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
                     />
+
+                    {/* Dark overlay for better contrast */}
+                    <div className="absolute inset-0 bg-black/10" />
+
+                    {/* Main image */}
+                    <div className="relative flex h-[500px] w-full items-center justify-center sm:h-[550px]">
+                      <img
+                        src={data.images}
+                        alt="post"
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    </div>
+
                     {burstPost === data.$id && (
                       <Heart
-                        className="absolute inset-0 m-auto h-24 w-24 text-white drop-shadow-lg animate-ping-once"
+                        className="absolute inset-0 m-auto h-24 w-24 animate-ping-once text-white drop-shadow-lg"
                         fill="white"
                         strokeWidth={0}
                       />
                     )}
                   </div>
                 )}
-
                 {/* Caption */}
                 <div className="px-3 pt-2 pb-2 text-sm text-ink">
                   {/* <span className="font-semibold mr-1.5">
@@ -478,7 +491,6 @@ export default function Body({
                   </span> */}
                   <span className="break-words">{data.content}</span>
                 </div>
-
                 {commentCount > 0 && (
                   <button
                     className="block px-3 pt-1.5 pb-2 text-sm text-ink-muted cursor-pointer hover:text-ink-soft"
@@ -488,7 +500,6 @@ export default function Body({
                     {commentCount > 1 ? "comments" : "comment"}
                   </button>
                 )}
-
                 {/* Actions */}
                 <div className="flex items-center justify-between px-3 pt-1 pb-2.5">
                   <div className="flex items-center gap-3">
@@ -544,7 +555,6 @@ export default function Body({
                     )}
                   </div>
                 </div>
-
                 {/* Add comment */}
                 <div className="flex items-center gap-2 border-t border-hairline px-3 py-2.5">
                   <input
