@@ -38,32 +38,39 @@ export function Providers({ children }: { children: ReactNode }) {
       const me = await account.get();
       setUser(me);
 
-      // Check if profile exists
-      const result = await tablesDB.listRows({
-        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-        tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-        queries: [Query.equal("user_id", me.$id)]
-      });
-
-      if (result.rows.length === 0) {
-        const username = (me.email ?? me.name ?? "user")
-          .split("@")[0]
-          .toLowerCase()
-          .replace(/[^a-z0-9._]/g, "")
-          .slice(0, 24);
-        await tablesDB.createRow({
+      // Profile sync must NEVER invalidate a valid session. If the table is
+      // misconfigured (permissions, missing attributes), the user stays logged
+      // in and the rest of the app surfaces the profile error separately.
+      try {
+        // Check if profile exists
+        const result = await tablesDB.listRows({
           databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
           tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-          rowId: ID.unique(),
-          data: {
-            user_id: me.$id,
-            name: me.name,
-            email: me.email,
-            username: username || `user${me.$id.slice(0, 6)}`,
-            bio: "",
-            avatar: `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(me.name)}` // default or generated avatar URL
-          }
+          queries: [Query.equal("user_id", me.$id)]
         });
+
+        if (result.rows.length === 0) {
+          const username = (me.email ?? me.name ?? "user")
+            .split("@")[0]
+            .toLowerCase()
+            .replace(/[^a-z0-9._]/g, "")
+            .slice(0, 24);
+          await tablesDB.createRow({
+            databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+            tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
+            rowId: ID.unique(),
+            data: {
+              user_id: me.$id,
+              name: me.name,
+              email: me.email,
+              username: username || `user${me.$id.slice(0, 6)}`,
+              bio: "",
+              avatar: `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(me.name)}` // default or generated avatar URL
+            }
+          });
+        }
+      } catch (profileError) {
+        console.error("Profile sync skipped (session kept):", profileError);
       }
     } catch {
       setUser(null);
@@ -73,7 +80,23 @@ export function Providers({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    loadUser();
+    let cancelled = false;
+
+    const mount = async () => {
+      try {
+        await loadUser();
+      } catch {
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    mount();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const googleLogin = () => {
