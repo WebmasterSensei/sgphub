@@ -15,7 +15,7 @@ import {
   Save,
   Camera
 } from "lucide-react";
-import { tablesDB } from "@/lib/appwrite";
+import { tablesDB, storage } from "@/lib/appwrite";
 import { uploadImage, validateImage } from "@/lib/storage";
 
 type PanelShellProps = {
@@ -120,31 +120,90 @@ export function ProfileSettingsPanel({
 
   const save = async () => {
     if (!profile || !canSave) return;
+
     setSaving(true);
+    setAvatarError(null);
+
     try {
       let avatar = profile.avatar;
-      if (avatarFile) {
-        const bucketId = process.env.NEXT_PUBLIC_APPWRITE_AVATAR_BUCKET_ID;
-        if (!bucketId) throw new Error("Avatar bucket is not configured.");
-        avatar = await uploadImage(avatarFile, bucketId);
+      let oldAvatarFileId: string | null = null;
+
+      const bucketId = process.env.NEXT_PUBLIC_APPWRITE_AVATAR_BUCKET_ID;
+
+      if (!bucketId) {
+        throw new Error("Avatar bucket is not configured.");
       }
-      const updated = {
-        name: name.trim(),
-        username: username.trim().toLowerCase(),
-        bio: bio.trim(),
-        avatar
-      };
-      await tablesDB.updateRow({
-        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-        tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
-        rowId: profile.$id,
-        data: updated
-      });
-      onSaved?.({ ...profile, ...updated });
+
+      // Upload the new avatar first
+      if (avatarFile) {
+        // Extract the old Appwrite file ID before replacing the avatar
+        if (profile.avatar) {
+          try {
+            const match = profile.avatar.match(/\/files\/([^/]+)\/view/);
+
+            oldAvatarFileId = match?.[1] ?? null;
+          } catch {
+            oldAvatarFileId = null;
+          }
+        }
+
+        // Upload new image
+        avatar = await uploadImage(avatarFile, bucketId);
+
+        // Update profile with the new avatar
+        const updated = {
+          name: name.trim(),
+          username: username.trim().toLowerCase(),
+          bio: bio.trim(),
+          avatar
+        };
+
+        await tablesDB.updateRow({
+          databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
+          rowId: profile.$id,
+          data: updated
+        });
+
+        // Delete old avatar only after the profile successfully
+        // points to the new image.
+        if (oldAvatarFileId) {
+          try {
+            await storage.deleteFile({
+              bucketId,
+              fileId: oldAvatarFileId
+            });
+          } catch (deleteError) {
+            // Do not fail the profile update if old-file deletion fails.
+            console.error("Failed to delete old avatar:", deleteError);
+          }
+        }
+
+        onSaved?.({ ...profile, ...updated });
+      } else {
+        // No new avatar — just update profile information
+        const updated = {
+          name: name.trim(),
+          username: username.trim().toLowerCase(),
+          bio: bio.trim(),
+          avatar
+        };
+
+        await tablesDB.updateRow({
+          databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
+          rowId: profile.$id,
+          data: updated
+        });
+
+        onSaved?.({ ...profile, ...updated });
+      }
+
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2000);
     } catch (error) {
       console.error(error);
+
       setAvatarError(error instanceof Error ? error.message : "Save failed.");
     } finally {
       setSaving(false);
@@ -191,7 +250,9 @@ export function ProfileSettingsPanel({
           <div className="min-w-0">
             <p className="font-medium text-ink">Profile photo</p>
             <p className="text-sm text-ink-muted">
-              {avatarFile ? "New photo ready – save to apply" : "Click to upload a new one"}
+              {avatarFile
+                ? "New photo ready – save to apply"
+                : "Click to upload a new one"}
             </p>
             {avatarError && (
               <p className="mt-1 text-xs text-red-500">{avatarError}</p>
