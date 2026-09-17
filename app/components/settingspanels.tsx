@@ -23,7 +23,12 @@ type PanelShellProps = {
   children: React.ReactNode;
 };
 
-function PanelShell({ icon: Icon, title, subtitle, children }: PanelShellProps) {
+function PanelShell({
+  icon: Icon,
+  title,
+  subtitle,
+  children
+}: PanelShellProps) {
   return (
     <div className="w-full max-w-full">
       <div className="mb-5 flex items-center gap-3 border-b border-hairline pb-4">
@@ -67,7 +72,9 @@ function Field({
         placeholder={placeholder}
         className="w-full rounded-xl border border-hairline bg-surface-raised px-4 py-3 text-sm text-ink outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20 placeholder:text-ink-muted"
       />
-      {hint && <span className="mt-1 block text-xs text-ink-muted">{hint}</span>}
+      {hint && (
+        <span className="mt-1 block text-xs text-ink-muted">{hint}</span>
+      )}
     </label>
   );
 }
@@ -101,7 +108,12 @@ export function ProfileSettingsPanel({
           bio: bio.trim()
         }
       });
-      onSaved?.({ ...profile, name: name.trim(), username: username.trim().toLowerCase(), bio: bio.trim() });
+      onSaved?.({
+        ...profile,
+        name: name.trim(),
+        username: username.trim().toLowerCase(),
+        bio: bio.trim()
+      });
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2000);
     } catch (error) {
@@ -112,7 +124,11 @@ export function ProfileSettingsPanel({
   };
 
   return (
-    <PanelShell icon={User} title="Edit profile" subtitle="How others see you on Street GP">
+    <PanelShell
+      icon={User}
+      title="Edit profile"
+      subtitle="How others see you on MisFists"
+    >
       <div className="space-y-4">
         <div className="flex items-center gap-4 rounded-2xl border border-hairline bg-surface-raised p-4">
           <img
@@ -407,11 +423,7 @@ export function LanguagePanel() {
   const languages = ["English (US)", "English (UK)", "Filipino", "Spanish"];
   const [selected, setSelected] = useState(languages[0]);
   return (
-    <PanelShell
-      icon={Globe}
-      title="Language & region"
-      subtitle="App language"
-    >
+    <PanelShell icon={Globe} title="Language & region" subtitle="App language">
       <div className="space-y-2">
         {languages.map((lang) => (
           <button

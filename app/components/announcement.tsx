@@ -95,17 +95,14 @@ export default function Announcements() {
   useEffect(() => {
     console.log(API_URL);
     let cancelled = false;
-
     async function fetchAnnouncements() {
       try {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`${API_URL}/upcoming_api`,
-          {
-            method: "GET"
-          }
-        );
+        const res = await fetch(`${API_URL}/upcoming_api`, {
+          method: "GET"
+        });
 
         if (!res.ok) {
           throw new Error(`Request failed with status ${res.status}`);
