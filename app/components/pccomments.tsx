@@ -302,7 +302,7 @@ function CommentItem({
                 </div>
               )}
 
-              <div className="ml-5 mt-1 flex items-center gap-3 text-[11.5px] font-semibold text-ink-muted">
+              {/* <div className="ml-5 mt-1 flex items-center gap-3 text-[11.5px] font-semibold text-ink-muted">
                 <button
                   onClick={() =>
                     isReplying ? onCancelReply() : onStartReply(commentId)
@@ -316,7 +316,7 @@ function CommentItem({
                   <Share2 className="h-3.5 w-3.5" strokeWidth={2} />
                   Share
                 </button>
-              </div>
+              </div> */}
 
               {isReplying && (
                 <div className="ml-5 mt-2">

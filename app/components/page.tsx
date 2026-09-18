@@ -315,7 +315,7 @@ export default function Main() {
               <>
                 {isComment ? (
                   <div className="w-full">
-                    <div className="flex justify-end p-2">
+                    <div className="flex justify-end p-2 mr-3 mt-2">
                       <button
                         onClick={backtopost}
                         className="mb-3 flex items-center gap-2 text-sm font-medium text-ink-soft transition hover:text-ink"
