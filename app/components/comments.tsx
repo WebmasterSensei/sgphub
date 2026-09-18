@@ -336,6 +336,7 @@ export default function Comments({
   const [error, setError] = useState<string | null>(null);
 
   const { user } = useAuth();
+  const userAvatar = (user as any)?.avatar || (user as any)?.image || undefined;
 
   const handleLike = (id: string | number) => {
     setComments((prev) => toggleLike(prev, id));
@@ -456,7 +457,7 @@ export default function Comments({
                 comment={c}
                 depth={0}
                 onLike={handleLike}
-                userAvatar={user?.avatar}
+                userAvatar={userAvatar}
                 replyingId={replyingId}
                 onStartReply={(id) => {
                   setReplyingId(id);
@@ -488,7 +489,7 @@ export default function Comments({
         )}
         {user ? (
           <CommentComposer
-            avatar={user?.avatar}
+            avatar={userAvatar}
             value={commentValue}
             onChange={setCommentValue}
             onSubmit={submitComment}

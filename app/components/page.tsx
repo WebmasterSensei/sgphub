@@ -19,7 +19,6 @@ import {
 } from "./settingspanels";
 import { useRouter } from "next/navigation";
 import PcComments from "./pccomments";
-import Announcements from "./announcement";
 import FriendsPanel from "./friends";
 
 function SettingsPanelHost({
