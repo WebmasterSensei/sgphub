@@ -1,16 +1,23 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Heart,
   MessageCircle,
   MoreHorizontal,
-  ChevronDown
+  ChevronDown,
+  Loader2,
+  X
 } from "lucide-react";
 
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { useAuth } from "../providers";
+import { tablesDB } from "@/lib/appwrite";
+import { ID } from "appwrite";
 
 dayjs.extend(relativeTime);
+
+const COMMENT_MAX_LEN = 2000;
 
 // ---- helpers -----------------------------------------------------
 
@@ -38,19 +45,133 @@ function toggleLike(comments: any[], id: string | number): any[] {
   });
 }
 
+// ---- reusable composer, matching PcComments' ----------------------------
+
+function CommentComposer({
+  avatar,
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+  placeholder,
+  submitting,
+  autoFocus = false,
+  compact = false
+}: {
+  avatar?: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  onCancel?: () => void;
+  placeholder: string;
+  submitting: boolean;
+  autoFocus?: boolean;
+  compact?: boolean;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [value]);
+
+  const trimmed = value.trim();
+  const overLimit = value.length > COMMENT_MAX_LEN;
+  const canSubmit = !!trimmed && !overLimit && !submitting;
+
+  return (
+    <div className="flex gap-2">
+      {avatar !== undefined && (
+        <img
+          src={avatar || "/default-avatar.png"}
+          alt=""
+          className={`shrink-0 rounded-full object-cover ${compact ? "h-6 w-6" : "h-8 w-8"}`}
+        />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="rounded-2xl border border-hairline bg-hover/40 px-3 py-2 transition focus-within:border-ink-muted focus-within:bg-transparent">
+          <textarea
+            ref={textareaRef}
+            autoFocus={autoFocus}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (canSubmit) onSubmit();
+              }
+              if (e.key === "Escape" && onCancel) onCancel();
+            }}
+            placeholder={placeholder}
+            rows={1}
+            className="block max-h-[200px] w-full resize-none bg-transparent text-sm leading-snug text-ink outline-none placeholder:text-ink-muted"
+          />
+        </div>
+        <div className="mt-1.5 flex items-center justify-between">
+          <span
+            className={`text-[11px] ${overLimit ? "font-semibold text-red-500" : "text-ink-muted"}`}
+          >
+            {value.length > COMMENT_MAX_LEN - 200
+              ? `${value.length}/${COMMENT_MAX_LEN}`
+              : "Enter to post \u00b7 Shift+Enter for a new line"}
+          </span>
+          <div className="flex items-center gap-2">
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="rounded-full px-2.5 py-1 text-xs font-semibold text-ink-muted transition hover:bg-hover hover:text-ink-soft"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className="flex items-center gap-1.5 rounded-full bg-ink px-3 py-1 text-xs font-bold text-background transition disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {submitting && <Loader2 className="h-3 w-3 animate-spin" />}
+              {submitting ? "Posting..." : "Post"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---- single comment row (recursive) -----------------------------------------------------
 
 function CommentItem({
   comment,
   depth = 0,
-  onLike
+  onLike,
+  userAvatar,
+  replyingId,
+  onStartReply,
+  onCancelReply,
+  replyValue,
+  onReplyChange,
+  onSubmitReply,
+  submittingReply
 }: {
   comment: any;
   depth?: number;
   onLike: (id: string | number) => void;
+  userAvatar?: string;
+  replyingId: string | number | null;
+  onStartReply: (id: string | number) => void;
+  onCancelReply: () => void;
+  replyValue: string;
+  onReplyChange: (v: string) => void;
+  onSubmitReply: (id: string | number) => void;
+  submittingReply: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const hasReplies = comment.replies && comment.replies.length > 0;
+  const commentId = comment.$id || comment.id;
+  const isReplying = replyingId === commentId;
 
   return (
     <div className={`${depth > 0 ? "ml-4 sm:ml-6" : ""}`}>
@@ -98,9 +219,17 @@ function CommentItem({
           )}
 
           {/* actions */}
-          <div className="mt-1.5 flex justify-end gap-1 text-ink-soft">
+          <div className="mt-1.5 flex items-center justify-end gap-3 text-ink-soft">
             <button
-              onClick={() => onLike(comment.$id || comment.id)}
+              onClick={() =>
+                isReplying ? onCancelReply() : onStartReply(commentId)
+              }
+              className="text-[12.5px] font-semibold text-ink-muted transition hover:text-ink-soft"
+            >
+              Reply
+            </button>
+            <button
+              onClick={() => onLike(commentId)}
               className="group/btn flex items-center gap-1.5 cursor-pointer"
               aria-label="Like"
             >
@@ -121,6 +250,22 @@ function CommentItem({
               </span>
             </button>
           </div>
+
+          {isReplying && (
+            <div className="mt-2">
+              <CommentComposer
+                avatar={userAvatar}
+                value={replyValue}
+                onChange={onReplyChange}
+                onSubmit={() => onSubmitReply(commentId)}
+                onCancel={onCancelReply}
+                placeholder={`Reply to ${comment.user?.name || "this comment"}...`}
+                submitting={submittingReply}
+                autoFocus
+                compact
+              />
+            </div>
+          )}
 
           {/* collapse toggle */}
           {hasReplies && (
@@ -153,6 +298,14 @@ function CommentItem({
               comment={reply}
               depth={depth + 1}
               onLike={onLike}
+              userAvatar={userAvatar}
+              replyingId={replyingId}
+              onStartReply={onStartReply}
+              onCancelReply={onCancelReply}
+              replyValue={replyValue}
+              onReplyChange={onReplyChange}
+              onSubmitReply={onSubmitReply}
+              submittingReply={submittingReply}
             />
           ))}
         </div>
@@ -164,21 +317,114 @@ function CommentItem({
 // ---- root component -----------------------------------------------------
 
 export default function Comments({
-  comments: initialComments
+  comments: initialComments,
+  passedData,
+  reloadGetComments
 }: {
   comments: any[];
+  passedData?: any;
+  reloadGetComments?: () => void;
 }) {
-  // alert();
-
   const [comments, setComments] = useState(initialComments || []);
+  const [commentValue, setCommentValue] = useState("");
+  const [posting, setPosting] = useState(false);
+
+  const [replyingId, setReplyingId] = useState<string | number | null>(null);
+  const [replyValue, setReplyValue] = useState("");
+  const [postingReply, setPostingReply] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+
+  const { user } = useAuth();
 
   const handleLike = (id: string | number) => {
     setComments((prev) => toggleLike(prev, id));
   };
 
   useEffect(() => {
-    setComments(initialComments);
+    setComments(initialComments || []);
   }, [initialComments]);
+
+  const flashError = (msg: string) => {
+    setError(msg);
+    window.setTimeout(() => setError(null), 3500);
+  };
+
+  const postId = passedData?.$id;
+
+  const submitComment = async () => {
+    if (!user) {
+      flashError("Please log in to comment.");
+      return;
+    }
+    if (!postId) {
+      flashError("Couldn't tell which post this is for.");
+      return;
+    }
+    const comment = commentValue.trim();
+    if (!comment) return;
+
+    setPosting(true);
+    try {
+      await tablesDB.createRow({
+        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
+        rowId: ID.unique(),
+        data: {
+          comments: comment,
+          user_id: user.$id,
+          post_id: postId
+        }
+      });
+      setCommentValue("");
+      reloadGetComments?.();
+    } catch (err) {
+      console.error(err);
+      flashError("Couldn't post your comment. Try again.");
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  // Note: assumes the comments table has a `parent_id` column for
+  // nesting a reply under its parent comment — same assumption as
+  // PcComments' submitReply.
+  const submitReply = async (parentId: string | number) => {
+    if (!user) {
+      flashError("Please log in to reply.");
+      return;
+    }
+    if (!postId) {
+      flashError("Couldn't tell which post this is for.");
+      return;
+    }
+    const reply = replyValue.trim();
+    if (!reply) return;
+
+    setPostingReply(true);
+    try {
+      await tablesDB.createRow({
+        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
+        rowId: ID.unique(),
+        data: {
+          comments: reply,
+          user_id: user.$id,
+          post_id: postId,
+          parent_id: parentId
+        }
+      });
+      setReplyValue("");
+      setReplyingId(null);
+      reloadGetComments?.();
+    } catch (err) {
+      console.error(err);
+      flashError("Couldn't post your reply. Try again.");
+    } finally {
+      setPostingReply(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div
@@ -210,8 +456,48 @@ export default function Comments({
                 comment={c}
                 depth={0}
                 onLike={handleLike}
+                userAvatar={user?.avatar}
+                replyingId={replyingId}
+                onStartReply={(id) => {
+                  setReplyingId(id);
+                  setReplyValue("");
+                }}
+                onCancelReply={() => {
+                  setReplyingId(null);
+                  setReplyValue("");
+                }}
+                replyValue={replyValue}
+                onReplyChange={setReplyValue}
+                onSubmitReply={submitReply}
+                submittingReply={postingReply}
               />
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom composer — matches PcComments */}
+      <div className="shrink-0 border-t border-hairline bg-background px-1 pt-2.5">
+        {error && (
+          <div className="mb-2 flex items-center justify-between rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-500">
+            {error}
+            <button onClick={() => setError(null)} aria-label="Dismiss">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        {user ? (
+          <CommentComposer
+            avatar={user?.avatar}
+            value={commentValue}
+            onChange={setCommentValue}
+            onSubmit={submitComment}
+            placeholder="Add a comment..."
+            submitting={posting}
+          />
+        ) : (
+          <div className="flex items-center justify-between rounded-2xl border border-hairline bg-hover/40 px-3 py-2.5 text-sm text-ink-muted">
+            Log in to join the conversation.
           </div>
         )}
       </div>

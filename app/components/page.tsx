@@ -82,10 +82,7 @@ export default function Main() {
       const result = await tablesDB.listRows({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
         tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
-        queries: [
-          Query.equal("post_id", postId),
-          Query.orderDesc("$createdAt")
-        ]
+        queries: [Query.equal("post_id", postId), Query.orderDesc("$createdAt")]
       });
 
       const commenterIds = result.rows.map((c: any) => c.user_id);
@@ -320,7 +317,7 @@ export default function Main() {
               <>
                 {isComment ? (
                   <div className="w-full">
-                    <div className="mb-1 mt-2 flex justify-end" >
+                    <div className="mb-1 mt-2 flex justify-end">
                       <button
                         onClick={backtopost}
                         className="inline-flex items-center rounded-lg border  px-4 py-2 text-sm font-medium  transition hover:bg-gray-50 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
@@ -370,62 +367,7 @@ export default function Main() {
           )}
         </div>
 
-        {/* MOBILE BOTTOM SHEET - Column 3 */}
-        {isColumn3Open && (
-          <>
-            <div
-              className="fixed inset-0 z-50 backdrop-blur-sm transition-opacity duration-300 lg:hidden"
-              style={{ backgroundColor: "var(--overlay)" }}
-              onClick={() => setIsColumn3Open(false)}
-            />
-
-            <div
-              className={`
-                fixed bottom-0 left-0 right-0 z-[60] max-h-[88vh]
-                rounded-t-3xl shadow-2xl
-                transition-all duration-500 ease-out
-                ${isColumn3Open ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"}
-                lg:hidden
-              `}
-              style={{
-                backgroundColor: "var(--paper)",
-                borderTop: "1px solid var(--hairline)"
-              }}
-            >
-              <div className="flex justify-center pt-4 pb-2">
-                <div
-                  className="w-11 h-1.5 rounded-full"
-                  style={{ backgroundColor: "var(--hairline)" }}
-                />
-              </div>
-
-              <div className="px-5 pb-4 flex items-center justify-between">
-                <button
-                  onClick={() => setIsColumn3Open(false)}
-                  className="p-1 transition-colors"
-                  style={{ color: "var(--ink-soft)" }}
-                  aria-label="Close panel"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-                <p className="font-display font-semibold text-xl text-ink">
-                  {isComment ? "Comments" : "Announcements"}
-                </p>
-                <div className="w-6" />
-              </div>
-
-              <div className="overflow-auto h-[calc(88vh-80px)] bg-surface rounded-t-xl px-5 pb-5">
-                <div className="mt-5">
-                  {isComment ? (
-                    <Comments comments={selectedComment} />
-                  ) : (
-                    <Announcements />
-                  )}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+       
 
         {/* Mobile Sidebar Overlay */}
         {isSidebarOpen && (
