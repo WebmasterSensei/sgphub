@@ -6,19 +6,29 @@ import {
   Heart,
   MessageCircle,
   UserPlus,
+  UserCheck,
+  UserMinus,
   Loader2,
   Grid,
   X,
   Users,
-  UserMinus
+  Clock
 } from "lucide-react";
 import {
   fetchUserPosts,
   getPostStats,
   getFollowCounts,
   isFollowing,
-  toggleFollow
+  toggleFollow,
+  getFriendStatus,
+  getFriendCount,
+  sendFriendRequest,
+  respondFriendRequest,
+  removeFriend,
+  FriendStatus
 } from "@/lib/api";
+import { parseImages } from "@/lib/storage";
+import ImageLightbox from "./imagelightbox";
 import { useAuth } from "../providers";
 
 import dayjs from "dayjs";
@@ -55,8 +65,16 @@ export default function ProfileView({
   const [following, setFollowing] = useState(0);
   const [followingState, setFollowingState] = useState(false);
   const [busyFollow, setBusyFollow] = useState(false);
+  const [friendStatus, setFriendStatus] = useState<FriendStatus>("none");
+  const [friendRow, setFriendRow] = useState<any>(null);
+  const [friendCount, setFriendCount] = useState(0);
+  const [busyFriend, setBusyFriend] = useState(false);
   const [activePost, setActivePost] = useState<any>(null);
   const [postStats, setPostStats] = useState<Record<string, any>>({});
+  const [lightbox, setLightbox] = useState<{
+    images: string[];
+    index: number;
+  } | null>(null);
 
   const isSelf = Boolean(
     user && profile && (profile.user_id === user.$id || profile.$id === authProfile?.$id)
@@ -66,19 +84,26 @@ export default function ProfileView({
     let cancelled = false;
     (async () => {
       if (!profile) return;
-      const [userPosts, counts] = await Promise.all([
+      const [userPosts, counts, friendCountResult] = await Promise.all([
         fetchUserPosts(profile.user_id),
-        getFollowCounts(profile.user_id)
+        getFollowCounts(profile.user_id),
+        getFriendCount(profile.user_id)
       ]);
       if (cancelled) return;
       setFollowers(counts.followers);
       setFollowing(counts.following);
+      setFriendCount(friendCountResult);
       const withAuthor = userPosts.map((p) => ({ ...p, user: profile }));
       setPosts(withAuthor);
       if (user && !isSelf) {
-        const followingNow = await isFollowing(user.$id, profile.user_id);
+        const [followingNow, status] = await Promise.all([
+          isFollowing(user.$id, profile.user_id),
+          getFriendStatus(user.$id, profile.user_id)
+        ]);
         if (cancelled) return;
         setFollowingState(followingNow);
+        setFriendStatus(status.status);
+        setFriendRow(status.row);
       }
       setLoading(false);
     })();
@@ -96,11 +121,53 @@ export default function ProfileView({
     setBusyFollow(false);
   };
 
+  const handleAddFriend = async () => {
+    if (!user || isSelf) return;
+    setBusyFriend(true);
+    await sendFriendRequest(user.$id, profile.user_id);
+    setFriendStatus("pending-outgoing");
+    setBusyFriend(false);
+  };
+
+  const handleCancelFriend = async () => {
+    if (!user || isSelf || friendStatus !== "pending-outgoing") return;
+    setBusyFriend(true);
+    if (friendRow) await respondFriendRequest(friendRow.$id, "rejected");
+    setFriendStatus("none");
+    setFriendRow(null);
+    setBusyFriend(false);
+  };
+
+  const handleAcceptFriend = async () => {
+    if (!user || isSelf || friendStatus !== "pending-incoming" || !friendRow) {
+      return;
+    }
+    setBusyFriend(true);
+    await respondFriendRequest(friendRow.$id, "accepted");
+    setFriendStatus("friends");
+    setFriendCount((c) => c + 1);
+    setBusyFriend(false);
+  };
+
+  const handleUnfriend = async () => {
+    if (!user || isSelf || friendStatus !== "friends") return;
+    setBusyFriend(true);
+    await removeFriend(user.$id, profile.user_id);
+    setFriendStatus("none");
+    setFriendRow(null);
+    setFriendCount((c) => Math.max(c - 1, 0));
+    setBusyFriend(false);
+  };
+
   const openPost = async (post: any) => {
+    const images = parseImages(post.images);
     setActivePost(post);
     if (!postStats[post.$id]) {
       const stat = await getPostStats(post.$id);
       setPostStats((s) => ({ ...s, [post.$id]: stat }));
+    }
+    if (images.length > 0) {
+      setLightbox({ images, index: 0 });
     }
   };
 
@@ -150,27 +217,108 @@ export default function ProfileView({
                       Edit profile
                     </button>
                   ) : (
-                    <button
-                      onClick={handleToggleFollow}
-                      disabled={busyFollow}
-                      className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition active:scale-95 ${
-                        followingState
-                          ? "border border-hairline text-ink hover:bg-hover"
-                          : "bg-accent text-white hover:bg-accent-hover"
-                      }`}
-                    >
-                      {busyFollow ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : followingState ? (
-                        <>
-                          <UserMinus className="h-3.5 w-3.5" /> Following
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-3.5 w-3.5" /> Follow
-                        </>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {friendStatus === "none" && (
+                        <button
+                          onClick={handleAddFriend}
+                          disabled={busyFriend}
+                          className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-hover active:scale-95 disabled:opacity-50"
+                        >
+                          {busyFriend ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <UserPlus className="h-3.5 w-3.5" />
+                          )}
+                          Add friend
+                        </button>
                       )}
-                    </button>
+
+                      {friendStatus === "pending-outgoing" && (
+                        <button
+                          onClick={handleCancelFriend}
+                          disabled={busyFriend}
+                          title="Cancel request"
+                          className="flex items-center gap-1.5 rounded-lg border border-hairline px-4 py-1.5 text-xs font-semibold text-ink-soft transition hover:bg-hover active:scale-95 disabled:opacity-50"
+                        >
+                          {busyFriend ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Clock className="h-3.5 w-3.5" />
+                          )}
+                          Requested
+                        </button>
+                      )}
+
+                      {friendStatus === "pending-incoming" && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={handleAcceptFriend}
+                            disabled={busyFriend}
+                            className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-hover active:scale-95 disabled:opacity-50"
+                          >
+                            {busyFriend && (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            )}
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (friendRow)
+                                respondFriendRequest(friendRow.$id, "rejected");
+                              setFriendStatus("none");
+                              setFriendRow(null);
+                            }}
+                            className="rounded-lg border border-hairline px-3.5 py-1.5 text-xs font-semibold text-ink-soft transition hover:bg-hover active:scale-95"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+
+                      {friendStatus === "friends" && (
+                        <button
+                          onClick={handleUnfriend}
+                          disabled={busyFriend}
+                          title="Unfriend"
+                          className="group flex items-center gap-1.5 rounded-lg border border-hairline px-4 py-1.5 text-xs font-semibold text-ink transition hover:bg-hover active:scale-95 disabled:opacity-50"
+                        >
+                          {busyFriend ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <span className="hidden group-hover:block">
+                              <UserMinus className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                          <UserCheck className="h-3.5 w-3.5 group-hover:hidden" />
+                          <span className="group-hover:hidden">Friends</span>
+                          <span className="hidden group-hover:inline">
+                            Unfriend
+                          </span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleToggleFollow}
+                        disabled={busyFollow}
+                        className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition active:scale-95 ${
+                          followingState
+                            ? "border border-hairline text-ink hover:bg-hover"
+                            : "bg-accent text-white hover:bg-accent-hover"
+                        }`}
+                      >
+                        {busyFollow ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : followingState ? (
+                          <>
+                            <UserMinus className="h-3.5 w-3.5" /> Following
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-3.5 w-3.5" /> Follow
+                          </>
+                        )}
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -178,6 +326,7 @@ export default function ProfileView({
                   <Stat value={posts.length} label="posts" />
                   <Stat value={followers} label="followers" />
                   <Stat value={following} label="following" />
+                  <Stat value={friendCount} label="friends" />
                 </div>
               </div>
             </div>
@@ -228,12 +377,19 @@ export default function ProfileView({
                       className="group relative aspect-square overflow-hidden bg-hover"
                     >
                       {post.images ? (
-                        <img
-                          src={post.images}
-                          alt=""
-                          className="h-full w-full object-cover transition group-hover:scale-105"
-                          loading="lazy"
-                        />
+                        <div className="relative h-full w-full">
+                          <img
+                            src={parseImages(post.images)[0]}
+                            alt=""
+                            className="h-full w-full object-cover transition group-hover:scale-105"
+                            loading="lazy"
+                          />
+                          {parseImages(post.images).length > 1 && (
+                            <span className="absolute right-1.5 top-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                              {parseImages(post.images).length}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <div className="flex h-full w-full items-center justify-center px-3 text-left">
                           <p className="line-clamp-3 text-[11px] text-ink-soft group-hover:underline">
@@ -285,11 +441,22 @@ export default function ProfileView({
 
             <div className="overflow-auto">
               {activePost.images && (
-                <img
-                  src={activePost.images}
-                  alt="post"
-                  className="w-full object-cover"
-                />
+                <button
+                  onClick={() =>
+                    setLightbox({
+                      images: parseImages(activePost.images),
+                      index: 0
+                    })
+                  }
+                  className="block w-full"
+                  aria-label="Open image preview"
+                >
+                  <img
+                    src={parseImages(activePost.images)[0]}
+                    alt="post"
+                    className="w-full object-cover"
+                  />
+                </button>
               )}
               <div className="px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -315,6 +482,14 @@ export default function ProfileView({
             </div>
           </div>
         </div>
+      )}
+
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   );

@@ -22,29 +22,45 @@ import {
   hasLiked,
   togglePostLike
 } from "@/lib/api";
-import { uploadImage, validateImage } from "@/lib/storage";
+import {
+  uploadImage,
+  validateImage,
+  parseImages,
+  joinImages,
+  MAX_POST_IMAGES
+} from "@/lib/storage";
+import ImageLightbox from "./imagelightbox";
 
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { json } from "stream/consumers";
-import { pid } from "process";
 
 dayjs.extend(relativeTime);
 
 type BodyProps = {
-  onSelectComment: (comments: any[], passData: any) => void;
+  // Now just reports which post was clicked — Main owns fetching and
+  // reloading the comments themselves (Main doesn't unmount while the
+  // comments panel is open, Body does).
+  onSelectComment: (postId: string, passData: any) => void;
   profile: any;
   onViewProfile: (profile: any) => void;
-  registerReloadComment: (fn: (() => void) | null) => void; // ← new prop
 };
 
 type LikesState = Record<string, { liked: boolean; count: number }>;
 
+/** Fisher–Yates shuffle (in-place) */
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export default function Body({
   onSelectComment,
   profile,
-  onViewProfile,
-  registerReloadComment
+  onViewProfile
 }: BodyProps) {
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -56,13 +72,16 @@ export default function Body({
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [burstPost, setBurstPost] = useState<string | null>(null);
   const [submittingPost, setSubmittingPost] = useState(false);
-  const [postImage, setPostImage] = useState<File | null>(null);
-  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const [postImages, setPostImages] = useState<File[]>([]);
+  const [postImagePreviews, setPostImagePreviews] = useState<string[]>([]);
   const [postImageError, setPostImageError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{
+    images: string[];
+    index: number;
+  } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const lastTap = useRef<Record<string, number>>({});
-  const [passData, setPassData] = useState<any>();
 
   const handleImageTap = (postId: string, liked: boolean) => {
     const now = Date.now();
@@ -97,36 +116,13 @@ export default function Body({
     [user, likesState]
   );
 
-  const [pId, setPID] = useState<any>();
-
-  const pIdRef = useRef(pId);
-  const passDataRef = useRef(passData);
-  pIdRef.current = pId;
-  passDataRef.current = passData;
-
-  const getComments = async (postId: string, data: any) => {
-    try {
-      const result = await tablesDB.listRows({
-        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
-        tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
-        queries: [Query.equal("post_id", postId), Query.orderDesc("$createdAt")]
-      });
-
-      const commenterIds = result.rows.map((c: any) => c.user_id);
-      const profiles = await fetchProfilesByUserIds(commenterIds);
-
-      const commentsWithUsers = result.rows.map((comment: any) => ({
-        ...comment,
-        user: profiles[comment.user_id] ?? null
-      }));
-
-      onSelectComment(commentsWithUsers, data);
-      setPassData(data);
-      setPID(postId);
-      fetchRows();
-    } catch (error) {
-      console.error(error);
-    }
+  // Just hand the postId + post data up to Main, which does the actual
+  // fetching. Main stays mounted while the comments panel is open, so
+  // it can reload comments on demand — Body can't, since it unmounts
+  // as soon as the comments panel opens.
+  const getComments = (postId: string, data: any) => {
+    onSelectComment(postId, data);
+    fetchRows(false); // keep chronological order, refresh comment counts
   };
 
   const submitPosts = async () => {
@@ -135,7 +131,7 @@ export default function Body({
       return;
     }
 
-    if (!postValue.trim() && !postImage) {
+    if (!postValue.trim() && postImages.length === 0) {
       alert("Post cannot be empty.");
       return;
     }
@@ -143,10 +139,14 @@ export default function Body({
     try {
       setSubmittingPost(true);
       let images = "";
-      if (postImage) {
+      if (postImages.length > 0) {
         const bucketId = process.env.NEXT_PUBLIC_APPWRITE_AVATAR_BUCKET_ID;
         if (!bucketId) throw new Error("Post image bucket is not configured.");
-        images = await uploadImage(postImage, bucketId);
+        const urls: string[] = [];
+        for (const file of postImages) {
+          urls.push(await uploadImage(file, bucketId));
+        }
+        images = joinImages(urls);
       }
       await tablesDB.createRow({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -160,10 +160,11 @@ export default function Body({
       });
 
       setPostValue("");
-      setPostImage(null);
-      setPostImagePreview(null);
+      setPostImages([]);
+      setPostImagePreviews([]);
       setPostImageError(null);
-      fetchRows(); // Reload the posts
+      // Do NOT shuffle — newest post must stay at the top
+      fetchRows(false);
     } catch (error) {
       console.error(error);
     } finally {
@@ -172,10 +173,10 @@ export default function Body({
   };
 
   const pickPostImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
     try {
-      validateImage(file);
+      files.forEach(validateImage);
     } catch (err) {
       setPostImageError(
         err instanceof Error ? err.message : "Could not read that image."
@@ -183,8 +184,26 @@ export default function Body({
       return;
     }
     setPostImageError(null);
-    setPostImage(file);
-    setPostImagePreview(URL.createObjectURL(file));
+    const remaining = MAX_POST_IMAGES - postImages.length;
+    const accepted = files.slice(0, Math.max(remaining, 0));
+    if (files.length > remaining) {
+      setPostImageError(
+        remaining > 0
+          ? `Only ${remaining} more image${remaining > 1 ? "s" : ""} allowed (max ${MAX_POST_IMAGES}).`
+          : `Limit of ${MAX_POST_IMAGES} images per post.`
+      );
+    }
+    setPostImages((prev) => [...prev, ...accepted]);
+    setPostImagePreviews((prev) => [
+      ...prev,
+      ...accepted.map((file) => URL.createObjectURL(file))
+    ]);
+    e.target.value = "";
+  };
+
+  const removePostImage = (index: number) => {
+    setPostImages((prev) => prev.filter((_, i) => i !== index));
+    setPostImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   const submitComment = async (postId: string) => {
@@ -216,14 +235,13 @@ export default function Body({
         ...prev,
         [postId]: ""
       }));
-      // getComments(postId, passData);
-      fetchRows(); // Reload the posts
+      fetchRows(false);
     } catch (error) {
       console.error(error);
     }
   };
 
-  const fetchRows = async () => {
+  const fetchRows = async (shouldShuffle = false) => {
     if (!user?.$id) return;
 
     setIsLoading(true);
@@ -262,14 +280,18 @@ export default function Body({
         })
       );
 
-      setPosts(
-        stats.map((post: any, index: number) => ({
-          ...post,
-          index,
-          user: authorProfileMap[post.user_id] ?? null
-        }))
-      );
+      let finalPosts = stats.map((post: any, index: number) => ({
+        ...post,
+        index,
+        user: authorProfileMap[post.user_id] ?? null
+      }));
 
+      // Only randomize on refresh / first load
+      if (shouldShuffle) {
+        finalPosts = shuffleArray(finalPosts);
+      }
+
+      setPosts(finalPosts);
       setLikesState(likesMap);
     } catch (err) {
       console.error(err);
@@ -278,23 +300,10 @@ export default function Body({
     }
   };
 
-  useEffect(() => {
-    const reload = () => {
-      if (pIdRef.current && passDataRef.current) {
-        getComments(pIdRef.current, passDataRef.current);
-      }
-    };
-
-    registerReloadComment(reload);
-
-    return () => {
-      registerReloadComment(null); // clean up when Body unmounts
-    };
-  }, [registerReloadComment]);
-
+  // Initial load / page refresh → random order
   useEffect(() => {
     if (user?.$id) {
-      fetchRows();
+      fetchRows(true);
     }
   }, [user?.$id]);
 
@@ -346,13 +355,14 @@ export default function Body({
             ref={imageInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
             className="hidden"
             onChange={pickPostImage}
           />
 
           <button
             onClick={() => imageInputRef.current?.click()}
-            aria-label="Attach an image"
+            aria-label="Attach images"
             disabled={submittingPost}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-hover disabled:opacity-40"
           >
@@ -361,7 +371,9 @@ export default function Body({
 
           <button
             onClick={submitPosts}
-            disabled={submittingPost || (!postValue.trim() && !postImage)}
+            disabled={
+              submittingPost || (!postValue.trim() && postImages.length === 0)
+            }
             aria-label="Post"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-hover disabled:opacity-40"
           >
@@ -373,28 +385,33 @@ export default function Body({
           </button>
         </div>
 
-        {postImagePreview && (
-          <div className="mt-2 flex items-center gap-3">
-            <div className="relative h-20 w-20 overflow-hidden rounded-xl border border-hairline">
-              <img
-                src={postImagePreview}
-                alt="post preview"
-                className="h-full w-full object-cover"
-              />
-              <button
-                onClick={() => {
-                  setPostImage(null);
-                  setPostImagePreview(null);
-                  setPostImageError(null);
-                }}
-                aria-label="Remove image"
-                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+        {postImagePreviews.length > 0 && (
+          <div className="mt-2 flex items-start gap-3">
+            <div className="flex flex-1 flex-wrap gap-2">
+              {postImagePreviews.map((preview, index) => (
+                <div
+                  key={`${preview}-${index}`}
+                  className="relative h-20 w-20 overflow-hidden rounded-xl border border-hairline"
+                >
+                  <img
+                    src={preview}
+                    alt="post preview"
+                    className="h-full w-full object-cover"
+                  />
+                  <button
+                    onClick={() => removePostImage(index)}
+                    aria-label="Remove image"
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
             {postImageError && (
-              <p className="text-xs text-red-500">{postImageError}</p>
+              <p className="w-40 shrink-0 text-xs text-red-500">
+                {postImageError}
+              </p>
             )}
           </div>
         )}
@@ -445,52 +462,61 @@ export default function Body({
                   <p className="px-3 pt-1.5 pb-2 text-[10px] tracking-wide text-ink">
                     {dayjs(data.$createdAt).fromNow()}
                   </p>
-
-                  {/* <MoreHorizontal className="h-5 w-5 cursor-pointer text-ink-soft" /> */}
                 </div>
+
                 {/* Image */}
-                {data.images && (
-                  <div
-                    className="relative w-full cursor-pointer overflow-hidden bg-black"
-                    onClick={() => handleImageTap(data.$id, state.liked)}
-                  >
-                    {/* Blurred background */}
-                    <img
-                      src={data.images}
-                      alt=""
-                      aria-hidden="true"
-                      className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
-                    />
+                {data.images &&
+                  (() => {
+                    const images = parseImages(data.images);
+                    return (
+                      <div
+                        className="relative w-full cursor-pointer overflow-hidden bg-black"
+                        onClick={() => handleImageTap(data.$id, state.liked)}
+                      >
+                        <img
+                          src={images[0]}
+                          alt=""
+                          aria-hidden="true"
+                          className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
+                        />
+                        <div className="absolute inset-0 bg-black/10" />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLightbox({ images, index: 0 });
+                          }}
+                          aria-label="Preview image"
+                          className="relative flex h-[500px] w-full items-center justify-center sm:h-[550px]"
+                        >
+                          <img
+                            src={images[0]}
+                            alt="post"
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+                          {images.length > 1 && (
+                            <span className="absolute right-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">
+                              {images.length} photos
+                            </span>
+                          )}
+                        </button>
 
-                    {/* Dark overlay for better contrast */}
-                    <div className="absolute inset-0 bg-black/10" />
+                        {burstPost === data.$id && (
+                          <Heart
+                            className="absolute inset-0 m-auto h-24 w-24 animate-ping-once text-white drop-shadow-lg"
+                            fill="white"
+                            strokeWidth={0}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
 
-                    {/* Main image */}
-                    <div className="relative flex h-[500px] w-full items-center justify-center sm:h-[550px]">
-                      <img
-                        src={data.images}
-                        alt="post"
-                        className="h-full w-full object-contain"
-                        loading="lazy"
-                      />
-                    </div>
-
-                    {burstPost === data.$id && (
-                      <Heart
-                        className="absolute inset-0 m-auto h-24 w-24 animate-ping-once text-white drop-shadow-lg"
-                        fill="white"
-                        strokeWidth={0}
-                      />
-                    )}
-                  </div>
-                )}
                 {/* Caption */}
                 <div className="px-3 pt-2 pb-2 text-sm text-ink">
-                  {/* <span className="font-semibold mr-1.5">
-                    {data.user?.username || data.user?.name}
-                  </span> */}
                   <span className="break-words">{data.content}</span>
                 </div>
+
                 {commentCount > 0 && (
                   <button
                     className="block px-3 pt-1.5 pb-2 text-sm text-ink-muted cursor-pointer hover:text-ink-soft"
@@ -500,6 +526,7 @@ export default function Body({
                     {commentCount > 1 ? "comments" : "comment"}
                   </button>
                 )}
+
                 {/* Actions */}
                 <div className="flex items-center justify-between px-3 pt-1 pb-2.5">
                   <div className="flex items-center gap-3">
@@ -525,14 +552,12 @@ export default function Body({
                         className="h-5 w-5 cursor-pointer text-ink"
                         strokeWidth={2}
                       />
-
                       {commentCount > 0 && (
                         <span className="absolute -top-2 -right-2 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
                           {commentCount > 99 ? "99+" : commentCount}
                         </span>
                       )}
                     </button>
-
                     <button
                       onClick={() => sharePost(data.content, data.$id)}
                       aria-label="Share"
@@ -544,17 +569,15 @@ export default function Body({
                       />
                     </button>
                   </div>
-                  {/* Likes */}
-                  <div className="flex jusfify-between gap-1 text-sm">
-                    {/* {state?.count} */}
+                  <div className="flex justify-between gap-1 text-sm">
                     {state?.count > 0 && (
                       <p>
-                        {" "}
                         {state?.count} {state?.count > 1 ? "likes" : "like"}
                       </p>
                     )}
                   </div>
                 </div>
+
                 {/* Add comment */}
                 <div className="flex items-center gap-2 border-t border-hairline px-3 py-2.5">
                   <input
@@ -578,14 +601,6 @@ export default function Body({
                   <button
                     className="text-sm font-bold cursor-pointer"
                     onClick={() => submitComment(data.$id)}
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "Enter" &&
-                        commentValues[data.$id]?.trim()
-                      ) {
-                        submitComment(data.$id);
-                      }
-                    }}
                     disabled={!commentValues[data.$id]?.trim()}
                   >
                     Comment
@@ -637,6 +652,14 @@ export default function Body({
           animation: ping-once 0.7s ease-out;
         }
       `}</style>
+
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </main>
   );
 }

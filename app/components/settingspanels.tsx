@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { tablesDB, storage } from "@/lib/appwrite";
 import { uploadImage, validateImage } from "@/lib/storage";
+import GetCroppedImg from "./avatarcrop";
 
 type PanelShellProps = {
   icon: any;
@@ -96,6 +97,7 @@ export function ProfileSettingsPanel({
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canSave = name.trim().length > 0 && /^[a-z0-9._]{3,24}$/.test(username);
@@ -114,8 +116,16 @@ export function ProfileSettingsPanel({
       return;
     }
     setAvatarError(null);
+    setAvatarFile(null);
+    setAvatarPreview(null);
+    setCropSrc(URL.createObjectURL(file));
+    e.target.value = "";
+  };
+
+  const handleCropped = (file: File) => {
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
+    setCropSrc(null);
   };
 
   const save = async () => {
@@ -303,6 +313,14 @@ export function ProfileSettingsPanel({
           {savedFlash ? "Saved!" : "Save changes"}
         </button>
       </div>
+
+      {cropSrc && (
+        <GetCroppedImg
+          imageSrc={cropSrc}
+          onCancel={() => setCropSrc(null)}
+          onCropped={handleCropped}
+        />
+      )}
     </PanelShell>
   );
 }

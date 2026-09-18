@@ -8,11 +8,13 @@ import {
   Palette,
   Globe,
   LogOut,
-  ChevronRight
+  ChevronRight,
+  Users
 } from "lucide-react";
 
 export type SettingsItem =
   | "profile"
+  | "friends"
   | "notifications"
   | "privacy"
   | "appearance"
@@ -93,6 +95,12 @@ export default function Settings({
             label="Profile"
             active={activeItem === "profile"}
             onClick={() => onNavigate("profile")}
+          />
+          <NavItem
+            icon={Users}
+            label="Friends"
+            active={activeItem === "friends"}
+            onClick={() => onNavigate("friends")}
           />
           <NavItem
             icon={Bell}

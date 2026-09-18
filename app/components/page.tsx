@@ -1,6 +1,6 @@
 // app/page.tsx — Main layout (profile / settings / feed / topics / comments)
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Settings, { SettingsItem } from "./profile";
 import Comments from "./comments";
 import { Menu, X, Feather, ChevronLeft, ArrowLeft } from "lucide-react";
@@ -8,6 +8,7 @@ import Body from "./body";
 import { useAuth } from "../providers";
 import { tablesDB } from "@/lib/appwrite";
 import { Query } from "appwrite";
+import { fetchProfilesByUserIds } from "@/lib/api";
 import NewsFeed from "./newspaper";
 import ProfileView from "./profileview";
 import {
@@ -20,17 +21,20 @@ import {
 import { useRouter } from "next/navigation";
 import PcComments from "./pccomments";
 import Announcements from "./announcement";
+import FriendsPanel from "./friends";
 
 function SettingsPanelHost({
   item,
   profile,
   onProfileUpdated,
-  onBack
+  onBack,
+  onViewProfile
 }: {
   item: SettingsItem;
   profile: any;
   onProfileUpdated?: (updated: any) => void;
   onBack: () => void;
+  onViewProfile?: (profile: any) => void;
 }) {
   return (
     <div className="flex flex-1 flex-col items-center overflow-auto bg-background">
@@ -45,6 +49,7 @@ function SettingsPanelHost({
         {item === "profile" && (
           <ProfileSettingsPanel profile={profile} onSaved={onProfileUpdated} />
         )}
+        {item === "friends" && <FriendsPanel onViewProfile={onViewProfile} />}
         {item === "appearance" && <AppearancePanel />}
         {item === "notifications" && <NotificationsPanel />}
         {item === "privacy" && <PrivacyPanel />}
@@ -64,14 +69,53 @@ export default function Main() {
   const [activeSetting, setActiveSetting] = useState<SettingsItem | null>(null);
   const [viewProfile, setViewProfile] = useState<any>(null);
 
-  const [selectedComment, setSelectedComment] = useState<any>(null);
+  const [selectedComment, setSelectedComment] = useState<any[]>([]);
   const [passedData, setPassedData] = useState<any>(null);
 
-  const openComments = (comments: any, passData: any) => {
-    setSelectedComment(comments);
-    setPassedData(passData);
+  // Which post's comments are currently open — kept here (not in Body)
+  // because Body unmounts while the comments panel is showing, so any
+  // "reload" reference that lived inside Body would die with it.
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+
+  const loadComments = async (postId: string, postData?: any) => {
+    try {
+      const result = await tablesDB.listRows({
+        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
+        queries: [
+          Query.equal("post_id", postId),
+          Query.orderDesc("$createdAt")
+        ]
+      });
+
+      const commenterIds = result.rows.map((c: any) => c.user_id);
+      const profiles = await fetchProfilesByUserIds(commenterIds);
+
+      const commentsWithUsers = result.rows.map((comment: any) => ({
+        ...comment,
+        user: profiles[comment.user_id] ?? null
+      }));
+
+      setSelectedComment(commentsWithUsers);
+      if (postData) setPassedData(postData);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const openComments = (postId: string, postData: any) => {
+    setActivePostId(postId);
+    setPassedData(postData);
+    setSelectedComment([]); // clear stale comments while the fresh set loads
     setIsColumn3Open(true);
     setIsComment(true);
+    loadComments(postId, postData);
+  };
+
+  // Passed to PcComments — always points at live state, regardless of
+  // whether Body is mounted right now.
+  const reloadActiveComments = () => {
+    if (activePostId) loadComments(activePostId);
   };
 
   const openSettings = (item: SettingsItem) => {
@@ -96,7 +140,9 @@ export default function Main() {
     setProfile(updated);
   };
 
-  const reloadCommentBody = useRef<(() => void) | null>(null);
+  const backtopost = () => {
+    setIsComment(false);
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -268,19 +314,37 @@ export default function Main() {
                 profile={profile}
                 onProfileUpdated={handleProfileUpdated}
                 onBack={() => setActiveSetting(null)}
-              />
-            ) : (
-              <Body
-                onSelectComment={(comments, passData) =>
-                  openComments(comments, passData)
-                }
-                // Pass a *setter* instead of an invoker
-                registerReloadComment={(fn) => {
-                  reloadCommentBody.current = fn;
-                }}
-                profile={profile}
                 onViewProfile={viewAnyProfile}
               />
+            ) : (
+              <>
+                {isComment ? (
+                  <div className="w-full">
+                    <div className="mb-1 mt-2 flex justify-end" >
+                      <button
+                        onClick={backtopost}
+                        className="inline-flex items-center rounded-lg border  px-4 py-2 text-sm font-medium  transition hover:bg-gray-50 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                      >
+                        ← Back To Feed
+                      </button>
+                    </div>
+
+                    <PcComments
+                      reloadGetComments={reloadActiveComments}
+                      comments={selectedComment}
+                      passedData={passedData}
+                    />
+                  </div>
+                ) : (
+                  <Body
+                    onSelectComment={(postId, passData) => {
+                      openComments(postId, passData);
+                    }}
+                    profile={profile}
+                    onViewProfile={viewAnyProfile}
+                  />
+                )}
+              </>
             )}
           </main>
         </div>
@@ -288,40 +352,7 @@ export default function Main() {
         {/* COLUMN 3 - Desktop */}
         <div className="hidden md:flex flex-col p-5 h-screen overflow-auto">
           {isComment ? (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-lg p-4"
-              onClick={() => setIsComment(false)}
-            >
-              {" "}
-              <div
-                className="w-full max-w-5xl max-h-[95vh] b overflow-hidden rounded-2xl bg-background shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {" "}
-                <div className="flex gap-2 border-b border-gray-800  px-4 py-3 text-ink">
-                  {" "}
-                  <button
-                    onClick={() => setIsComment(false)}
-                    className="rounded-full p-1 transition hover:bg-hover"
-                    aria-label="Back to topics"
-                  >
-                    {" "}
-                    <ArrowLeft className="h-4 w-4" />{" "}
-                  </button>{" "}
-                  <p className="font-display text-lg tracking-tight">
-                    {" "}
-                    Comments{" "}
-                  </p>{" "}
-                </div>{" "}
-                <div className="h-[calc(85vh-60px)] overflow-hidden p-5">
-                  <PcComments
-                    reloadGetComments={() => reloadCommentBody.current?.()}
-                    comments={selectedComment}
-                    passedData={passedData}
-                  />
-                </div>
-              </div>{" "}
-            </div>
+            <></>
           ) : (
             <>
               <div className="flex items-center gap-2 mb-4 text-ink">
@@ -333,8 +364,8 @@ export default function Main() {
                   Announcements
                 </p>
               </div>
-              <Announcements />
-              {/* <NewsFeed /> */}
+              {/* <Announcements /> */}
+              <NewsFeed />
             </>
           )}
         </div>

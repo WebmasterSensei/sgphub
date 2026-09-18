@@ -1,15 +1,19 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowBigUp,
   ArrowBigDown,
   MessageSquare,
   Share2,
-  MessageCircle
+  MessageCircle,
+  Loader2,
+  X
 } from "lucide-react";
 
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { parseImages } from "@/lib/storage";
+import ImageLightbox from "./imagelightbox";
 
 dayjs.extend(relativeTime);
 
@@ -21,6 +25,7 @@ dayjs.extend(relativeTime);
 const THREAD_COLORS = ["#878A8C", "#3B82F6", "#F59E0B", "#10B981", "#EC4899"];
 const UPVOTE_COLOR = "#FF4500";
 const DOWNVOTE_COLOR = "#7193FF";
+const COMMENT_MAX_LEN = 2000;
 
 // ---- helpers -----------------------------------------------------
 
@@ -61,16 +66,132 @@ function applyVote(
   });
 }
 
+// ---- tiny reusable input bar (used for both the root composer and
+// inline replies) so the "add a comment" experience is consistent
+// everywhere in the thread -----------------------------------------------------
+
+function CommentComposer({
+  avatar,
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+  placeholder,
+  submitting,
+  autoFocus = false,
+  compact = false
+}: {
+  avatar?: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  onCancel?: () => void;
+  placeholder: string;
+  submitting: boolean;
+  autoFocus?: boolean;
+  compact?: boolean;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // auto-grow the textarea with content instead of showing a fixed,
+  // often-too-tall (or too-short) box
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [value]);
+
+  const trimmed = value.trim();
+  const overLimit = value.length > COMMENT_MAX_LEN;
+  const canSubmit = !!trimmed && !overLimit && !submitting;
+
+  return (
+    <div className="flex gap-2">
+      {avatar !== undefined && (
+        <img
+          src={avatar || "/default-avatar.png"}
+          alt=""
+          className={`shrink-0 rounded-full object-cover ${compact ? "h-6 w-6" : "h-8 w-8"}`}
+        />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="rounded-2xl border border-hairline bg-hover/40 px-3 py-2 transition focus-within:border-ink-muted focus-within:bg-transparent">
+          <textarea
+            ref={textareaRef}
+            autoFocus={autoFocus}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (canSubmit) onSubmit();
+              }
+              if (e.key === "Escape" && onCancel) onCancel();
+            }}
+            placeholder={placeholder}
+            rows={1}
+            className="block max-h-[200px] w-full resize-none bg-transparent text-sm leading-snug text-ink outline-none placeholder:text-ink-muted"
+          />
+        </div>
+        <div className="mt-1.5 flex items-center justify-between">
+          <span
+            className={`text-[11px] ${overLimit ? "font-semibold text-red-500" : "text-ink-muted"}`}
+          >
+            {value.length > COMMENT_MAX_LEN - 200
+              ? `${value.length}/${COMMENT_MAX_LEN}`
+              : "Enter to post \u00b7 Shift+Enter for a new line"}
+          </span>
+          <div className="flex items-center gap-2">
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="rounded-full px-2.5 py-1 text-xs font-semibold text-ink-muted transition hover:bg-hover hover:text-ink-soft"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className="flex items-center gap-1.5 rounded-full bg-ink px-3 py-1 text-xs font-bold text-background transition disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {submitting && <Loader2 className="h-3 w-3 animate-spin" />}
+              {submitting ? "Posting..." : "Post"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---- single comment row (recursive) -----------------------------------------------------
 
 function CommentItem({
   comment,
   depth = 0,
-  onVote
+  onVote,
+  userAvatar,
+  replyingId,
+  onStartReply,
+  onCancelReply,
+  replyValue,
+  onReplyChange,
+  onSubmitReply,
+  submittingReply
 }: {
   comment: any;
   depth?: number;
   onVote: (id: string | number, direction: 1 | -1) => void;
+  userAvatar?: string;
+  replyingId: string | number | null;
+  onStartReply: (id: string | number) => void;
+  onCancelReply: () => void;
+  replyValue: string;
+  onReplyChange: (v: string) => void;
+  onSubmitReply: (id: string | number) => void;
+  submittingReply: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const hasReplies = comment.replies && comment.replies.length > 0;
@@ -78,14 +199,16 @@ function CommentItem({
   const score = comment.react ?? 0;
   const childCount = hasReplies ? countDescendants(comment) : 0;
   const railColor = THREAD_COLORS[depth % THREAD_COLORS.length];
+  const commentId = comment.$id || comment.id;
+  const isReplying = replyingId === commentId;
 
   return (
-    <div className="py-1">
+    <div className="py-1 ml-10">
       <div className="flex gap-2">
         {/* vote column */}
         <div className="flex w-5 shrink-0 flex-col items-center pt-0.5">
           <button
-            onClick={() => onVote(comment.$id || comment.id, 1)}
+            onClick={() => onVote(commentId, 1)}
             aria-label="Upvote"
             aria-pressed={voteState === 1}
             className="rounded p-0.5 text-ink-muted transition hover:bg-hover"
@@ -114,7 +237,7 @@ function CommentItem({
             {formatCount(score)}
           </span>
           <button
-            onClick={() => onVote(comment.$id || comment.id, -1)}
+            onClick={() => onVote(commentId, -1)}
             aria-label="Downvote"
             aria-pressed={voteState === -1}
             className="rounded p-0.5 text-ink-muted transition hover:bg-hover"
@@ -165,7 +288,7 @@ function CommentItem({
 
           {!collapsed && (
             <>
-              <p className="mt-2 mb-2 text-[13px] ml-5 leading-snug text-ink-soft break-words">
+              <p className="mt-2 mb-2 ml-5 text-[13px] leading-snug text-ink-soft break-words">
                 {comment.comments}
               </p>
 
@@ -179,16 +302,37 @@ function CommentItem({
                 </div>
               )}
 
-              {/* <div className="mt-1 flex items-center gap-3 text-[11.5px] font-semibold text-ink-muted">
-                <button className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-hover hover:text-ink-soft">
+              <div className="ml-5 mt-1 flex items-center gap-3 text-[11.5px] font-semibold text-ink-muted">
+                <button
+                  onClick={() =>
+                    isReplying ? onCancelReply() : onStartReply(commentId)
+                  }
+                  className="flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-hover hover:text-ink-soft"
+                >
                   <MessageSquare className="h-3.5 w-3.5" strokeWidth={2} />
                   Reply
                 </button>
-                <button className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-hover hover:text-ink-soft">
+                <button className="flex items-center gap-1 rounded px-1 py-0.5 transition hover:bg-hover hover:text-ink-soft">
                   <Share2 className="h-3.5 w-3.5" strokeWidth={2} />
                   Share
                 </button>
-              </div> */}
+              </div>
+
+              {isReplying && (
+                <div className="ml-5 mt-2">
+                  <CommentComposer
+                    avatar={userAvatar}
+                    value={replyValue}
+                    onChange={onReplyChange}
+                    onSubmit={() => onSubmitReply(commentId)}
+                    onCancel={onCancelReply}
+                    placeholder={`Reply to ${comment.user?.name || "this comment"}...`}
+                    submitting={submittingReply}
+                    autoFocus
+                    compact
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
@@ -207,6 +351,14 @@ function CommentItem({
               comment={reply}
               depth={depth + 1}
               onVote={onVote}
+              userAvatar={userAvatar}
+              replyingId={replyingId}
+              onStartReply={onStartReply}
+              onCancelReply={onCancelReply}
+              replyValue={replyValue}
+              onReplyChange={onReplyChange}
+              onSubmitReply={onSubmitReply}
+              submittingReply={submittingReply}
             />
           ))}
         </div>
@@ -228,32 +380,47 @@ export default function PcComments({
 }: {
   comments: any[];
   passedData: any;
-  reloadGetComments:() => void;
+  reloadGetComments: () => void;
 }) {
   const [comments, setComments] = useState(initialComments || []);
   const [passedData, setPassedData] = useState(initialData);
-  const [commentValues, setCommentValues] = useState<Record<string, string>>(
-    {}
-  );
+  const [commentValue, setCommentValue] = useState("");
+  const [posting, setPosting] = useState(false);
+
+  const [replyingId, setReplyingId] = useState<string | number | null>(null);
+  const [replyValue, setReplyValue] = useState("");
+  const [postingReply, setPostingReply] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+
+  const [lightbox, setLightbox] = useState<{
+    images: string[];
+    index: number;
+  } | null>(null);
   const { user } = useAuth();
+
+  const [currentUserAvatar, setCurrentUserAvatar] = useState(
+    "/default-avatar.png"
+  );
 
   const handleVote = (id: string | number, direction: 1 | -1) => {
     setComments((prev) => applyVote(prev, id, direction));
   };
 
-  const submitComment = async (postId: string) => {
+  const flashError = (msg: string) => {
+    setError(msg);
+    window.setTimeout(() => setError(null), 3500);
+  };
+
+  const submitComment = async () => {
     if (!user) {
-      alert("Please log in first.");
+      flashError("Please log in to comment.");
       return;
     }
+    const comment = commentValue.trim();
+    if (!comment) return;
 
-    const comment = commentValues[postId]?.trim();
-
-    if (!comment) {
-      alert("Comment cannot be empty.");
-      return;
-    }
-
+    setPosting(true);
     try {
       await tablesDB.createRow({
         databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
@@ -262,137 +429,247 @@ export default function PcComments({
         data: {
           comments: comment,
           user_id: user.$id,
-          post_id: postId
+          post_id: passedData.$id
         }
       });
-
-      setCommentValues((prev) => ({
-        ...prev,
-        [postId]: ""
-      }));
-
+      setCommentValue("");
       reloadGetComments();
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      flashError("Couldn't post your comment. Try again.");
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  // Note: replying assumes the comments table has a `parent_id` column
+  // used to nest a reply under its parent comment. Adjust the field
+  // name below if your schema differs.
+  const submitReply = async (parentId: string | number) => {
+    if (!user) {
+      flashError("Please log in to reply.");
+      return;
+    }
+    const reply = replyValue.trim();
+    if (!reply) return;
+
+    setPostingReply(true);
+    try {
+      await tablesDB.createRow({
+        databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+        tableId: process.env.NEXT_PUBLIC_APPWRITE_COMMENTS_TABLE_ID!,
+        rowId: ID.unique(),
+        data: {
+          comments: reply,
+          user_id: user.$id,
+          post_id: passedData.$id,
+          parent_id: parentId
+        }
+      });
+      setReplyValue("");
+      setReplyingId(null);
+      reloadGetComments();
+    } catch (err) {
+      console.error(err);
+      flashError("Couldn't post your reply. Try again.");
+    } finally {
+      setPostingReply(false);
     }
   };
 
   useEffect(() => {
-    setComments(initialComments);
+    setComments(initialComments || []);
     setPassedData(initialData);
+
+    if (!user?.$id) {
+      setCurrentUserAvatar("/default-avatar.png");
+      return;
+    }
+
+    const loadProfile = async () => {
+      try {
+        const response = await tablesDB.listRows({
+          databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!,
+          tableId: process.env.NEXT_PUBLIC_APPWRITE_PROFILE_TABLE_ID!,
+          queries: [Query.equal("user_id", user.$id), Query.limit(1)]
+        });
+
+        const profile = response.rows?.[0];
+
+        setCurrentUserAvatar(profile?.avatar || "/default-avatar.png");
+      } catch (error) {
+        console.error("Failed to load user profile:", error);
+        setCurrentUserAvatar("/default-avatar.png");
+      }
+    };
+
+    loadProfile();
   }, [initialComments, initialData]);
 
   const post = passedData;
 
   return (
-    <div className="relative h-full overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-hairline hover:[&::-webkit-scrollbar-thumb]:bg-ink-muted">
-      {/* Post Content */}
-      {post && (
-        <div className="shrink-0 border-b mt-2 border-hairline px-4 py-4">
-          <div className="flex gap-3">
-            <img
-              src={post.user?.avatar}
-              alt={post.user?.name}
-              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-hairline"
-            />
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <div className="flex items-baseline gap-2">
-                <span className="text-sm font-semibold text-ink">
-                  {post.user?.name}
-                </span>
-                {post.$createdAt && (
-                  <span className="text-xs text-ink-muted">
-                    {dayjs(post.$createdAt).fromNow()}
+    <div className="relative flex h-full flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-hairline hover:[&::-webkit-scrollbar-thumb]:bg-ink-muted">
+        {/* Post Content */}
+        {post && (
+          <div className="shrink-0 border-b border-hairline px-4 py-4">
+            <div className="flex items-start gap-3">
+              <img
+                src={post.user?.avatar}
+                alt={post.user?.name}
+                className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-hairline"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-semibold text-ink">
+                    {post.user?.name}
                   </span>
-                )}
-              </div>
-              {passedData.images && (
-                <div className="relative w-full mb-3 cursor-pointer overflow-hidden">
-                  <img
-                    src={passedData.images}
-                    alt="post"
-                    className="w-full object-cover rounded-xl"
-                    loading="lazy"
-                  />
+                  {post.$createdAt && (
+                    <span className="text-xs text-ink-muted">
+                      {dayjs(post.$createdAt).fromNow()}
+                    </span>
+                  )}
                 </div>
-              )}
 
-              {post.title && (
-                <p className="text-[15px] font-semibold leading-snug text-ink">
-                  {post.title}
-                </p>
-              )}
-              {post.content && (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
-                  {post.content}
-                </p>
-              )}
-              <div className="mt-1.5 flex gap-4 text-xs text-ink-muted">
-                <span>{formatCount(post.likes ?? 0)} likes</span>
-                <span>
-                  {formatCount(post.commentsCount ?? comments.length)} comments
-                </span>
+                {passedData.images &&
+                  (() => {
+                    const images = parseImages(passedData.images);
+
+                    return (
+                      <div className="relative mb-3 mt-1 w-full overflow-hidden rounded-xl bg-black">
+                        {/* Blurred background */}
+                        <img
+                          src={images[0]}
+                          alt=""
+                          aria-hidden="true"
+                          className="absolute inset-0 h-full w-full scale-125 object-cover blur-2xl"
+                        />
+
+                        {/* Dark/soft overlay */}
+                        <div className="absolute inset-0 bg-black/20" />
+
+                        {/* Main image */}
+                        <button
+                          onClick={() => setLightbox({ images, index: 0 })}
+                          aria-label="Preview image"
+                          className="relative flex h-[260px] max-h-[480px] w-full items-center justify-center"
+                        >
+                          <img
+                            src={images[0]}
+                            alt="post"
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+
+                          {/* Photo count */}
+                          {images.length > 1 && (
+                            <span className="absolute right-2.5 top-2.5 rounded-full bg-black/60 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">
+                              {images.length} photos
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })()}
+
+                {post.title && (
+                  <p className="text-[15px] font-semibold leading-snug text-ink">
+                    {post.title}
+                  </p>
+                )}
+                {post.content && (
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
+                    {post.content}
+                  </p>
+                )}
+                <div className="mt-1.5 flex gap-4 text-xs text-ink-muted">
+                  <span>{formatCount(post.likes ?? 0)} likes</span>
+                  <span>
+                    {formatCount(post.commentsCount ?? comments.length)}{" "}
+                    comments
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Comments List */}
-      {comments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-hover">
-            <MessageCircle
-              className="h-5 w-5 text-ink-muted"
-              strokeWidth={1.5}
-            />
+        {/* Comments List */}
+        {comments.length === 0 ? (
+          <div className="flex flex-col  items-center justify-center py-10 text-center">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-hover">
+              <MessageCircle
+                className="h-5 w-5 text-ink-muted"
+                strokeWidth={1.5}
+              />
+            </div>
+            <p className="text-sm font-medium text-ink">No comments yet</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Start the conversation.
+            </p>
           </div>
-          <p className="text-sm font-medium text-ink">No comments yet</p>
-          <p className="mt-1 text-xs text-ink-muted">Start the conversation.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col px-27 py-2 pb-5 pt-2">
-          {comments.map((c: any) => (
-            <CommentItem
-              key={c.$id || c.id}
-              comment={c}
-              depth={0}
-              onVote={handleVote}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Sticky Bottom Input Bar */}
-      <div className="sticky bottom-0 z-10 border-t border-hairline bg-background px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <textarea
-            value={commentValues[passedData.$id] || ""}
-            onChange={(e) =>
-              setCommentValues((prev) => ({
-                ...prev,
-                [passedData.$id]: e.target.value
-              }))
-            }
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submitComment(passedData.$id);
-              }
-            }}
-            placeholder="Add a comment..."
-            rows={3}
-            className="flex-1 resize-none bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
-          />
-          <button
-            className="text-sm font-bold cursor-pointer disabled:opacity-50"
-            onClick={() => submitComment(passedData.$id)}
-            disabled={!commentValues[passedData.$id]?.trim()}
-          >
-            Comment
-          </button>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1 px-4 py-2 pb-5 pt-2 sm:px-8">
+            {comments.map((c: any) => (
+              <CommentItem
+                key={c.$id || c.id}
+                comment={c}
+                depth={0}
+                onVote={handleVote}
+                userAvatar={currentUserAvatar}
+                replyingId={replyingId}
+                onStartReply={(id) => {
+                  setReplyingId(id);
+                  setReplyValue("");
+                }}
+                onCancelReply={() => {
+                  setReplyingId(null);
+                  setReplyValue("");
+                }}
+                replyValue={replyValue}
+                onReplyChange={setReplyValue}
+                onSubmitReply={submitReply}
+                submittingReply={postingReply}
+              />
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Sticky Bottom Composer */}
+      <div className="shrink-0 border-t border-hairline bg-background px-3 py-1">
+        {error && (
+          <div className="mb-2 flex items-center justify-between rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-500">
+            {error}
+            <button onClick={() => setError(null)} aria-label="Dismiss">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+        {user ? (
+          <CommentComposer
+            avatar={currentUserAvatar}
+            value={commentValue}
+            onChange={setCommentValue}
+            onSubmit={submitComment}
+            placeholder="Add a comment..."
+            submitting={posting}
+          />
+        ) : (
+          <div className="flex items-center justify-between rounded-2xl border border-hairline bg-hover/40 px-3 py-2.5 text-sm text-ink-muted">
+            Log in to join the conversation.
+          </div>
+        )}
+      </div>
+
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }
