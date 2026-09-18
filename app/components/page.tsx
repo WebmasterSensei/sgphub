@@ -2,7 +2,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import Settings, { SettingsItem } from "./profile";
-import Comments from "./comments";
 import { Menu, X, Feather, ChevronLeft, ArrowLeft } from "lucide-react";
 import Body from "./body";
 import { useAuth } from "../providers";
