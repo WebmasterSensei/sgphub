@@ -36,7 +36,7 @@ function SettingsPanelHost({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center overflow-auto bg-background">
-      <div className="w-full max-w-full px-4 pt-4 pb-10">
+      <div className="w-full max-w-full px-4 pt-4 pb-10 mx-2">
         <button
           onClick={onBack}
           className="mb-3 flex items-center gap-2 text-sm font-medium text-ink-soft transition hover:text-ink"
@@ -315,12 +315,13 @@ export default function Main() {
               <>
                 {isComment ? (
                   <div className="w-full">
-                    <div className="mb-1 mt-2 flex justify-end">
+                    <div className="flex justify-end p-2">
                       <button
                         onClick={backtopost}
-                        className="inline-flex items-center rounded-lg border  px-4 py-2 text-sm font-medium  transition hover:bg-gray-50 hover:shadow-md dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                        className="mb-3 flex items-center gap-2 text-sm font-medium text-ink-soft transition hover:text-ink"
                       >
-                        ← Back To Feed
+                        <ArrowLeft className="h-4 w-4" />
+                        Back to feed
                       </button>
                     </div>
 
@@ -364,8 +365,6 @@ export default function Main() {
             </>
           )}
         </div>
-
-       
 
         {/* Mobile Sidebar Overlay */}
         {isSidebarOpen && (
